@@ -23,7 +23,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var sample: PlaybackSample?
     private var lyrics: Lyrics?
     private var nextCacheRead: TimeInterval = 0
-    private var message = "메뉴에서 Music을 연결해 주세요."
+    private var message = "Connect to Music from the menu."
     private var currentText = ""
     private var isConnected = false
     private var statusWindow: StatusWindow?
@@ -74,7 +74,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let lyrics, let sample {
             let position = sample.position(at: ProcessInfo.processInfo.systemUptime)
             if let index = lyrics.lines.lastIndex(where: { $0.start <= position }) {
-                let context = NSMenuItem(title: "주변 가사", action: nil, keyEquivalent: "")
+                let context = NSMenuItem(title: "Nearby Lyrics", action: nil, keyEquivalent: "")
                 let submenu = NSMenu()
                 for i in max(0, index - 2)...min(lyrics.lines.count - 1, index + 2) {
                     let line = lyrics.lines[i]
@@ -85,11 +85,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 menu.addItem(context)
             }
         }
-        addAction(isConnected ? "Music 다시 연결" : "Music 연결…", action: #selector(connect), to: menu)
-        addAction("상태 보기", action: #selector(showStatus), to: menu)
-        let widthItem = NSMenuItem(title: "가사 표시 폭", action: nil, keyEquivalent: "")
+        addAction(isConnected ? "Reconnect to Music" : "Connect to Music…", action: #selector(connect), to: menu)
+        addAction("Show Status", action: #selector(showStatus), to: menu)
+        let widthItem = NSMenuItem(title: "Lyrics Width", action: nil, keyEquivalent: "")
         let widths = NSMenu()
-        for (title, width) in [("컴팩트 · 200pt", 200.0), ("좁게 · 240pt", 240.0), ("보통 · 360pt", 360.0), ("넓게 · 600pt", 600.0)] {
+        for (title, width) in [("Compact · 200pt", 200.0), ("Narrow · 240pt", 240.0), ("Medium · 360pt", 360.0), ("Wide · 600pt", 600.0)] {
             let entry = NSMenuItem(title: title, action: #selector(changeWidth(_:)), keyEquivalent: "")
             entry.target = self
             entry.representedObject = width
@@ -98,11 +98,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         widthItem.submenu = widths
         menu.addItem(widthItem)
-        addAction("가사 캐시 다시 읽기", action: #selector(reloadLyrics), to: menu)
-        addAction("Music 열기", action: #selector(openMusic), to: menu)
+        addAction("Reload Lyrics Cache", action: #selector(reloadLyrics), to: menu)
+        addAction("Open Music", action: #selector(openMusic), to: menu)
         menu.addItem(.separator())
-        add("가사 출처: 이 Mac의 Apple Music 캐시", to: menu)
-        addAction("종료", action: #selector(quit), to: menu, key: "q")
+        add("Lyrics source: Apple Music cache on this Mac", to: menu)
+        addAction("Quit", action: #selector(quit), to: menu, key: "q")
     }
 
     @objc private func connect() {
@@ -113,7 +113,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         sample = nil
         lyrics = nil
         sampleCount = 0
-        message = "Music에 연결하는 중…"
+        message = "Connecting to Music…"
         pollTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
@@ -136,7 +136,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                             loadLyrics(for: result.track)
                         }
                     } else {
-                        message = "Music에서 노래를 재생해 주세요."
+                        message = "Play a song in Music."
                     }
                     render()
                 } catch {
@@ -171,7 +171,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func loadLyrics(for track: Track) {
         let started = ProcessInfo.processInfo.systemUptime
         nextCacheRead = started + 3
-        message = "Music 캐시에서 가사를 확인하는 중…"
+        message = "Looking for lyrics in the Music cache…"
         // Cache I/O must never stop playback polling. Reject a late result after
         // a track change or refresh, even when synchronous SQLite work finishes late.
         cacheTask = Task { [weak self] in
@@ -182,8 +182,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 cacheMilliseconds = (ProcessInfo.processInfo.systemUptime - started) * 1000
                 lyrics = loaded
                 message = loaded == nil
-                    ? "동기화 가사 없음 · Music에서 이 곡의 가사를 열어 주세요."
-                    : "Apple Music 가사 · 재생 위치에 맞춰 표시합니다."
+                    ? "No synced lyrics · Open this song’s lyrics in Music."
+                    : "Apple Music lyrics · Synced to playback."
             } catch {
                 guard !Task.isCancelled, sample?.track == track else { return }
                 message = error.localizedDescription
@@ -238,7 +238,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let sample {
             label = (sample.isPlaying ? "" : "Ⅱ ") + (currentText.isEmpty ? sample.track.title : currentText)
         } else {
-            label = isConnected ? "Music 대기 중" : "Music 연결"
+            label = isConnected ? "Waiting for Music" : "Connect to Music"
         }
         let singleLine = label.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\r", with: " ")
         let button = item.button
@@ -266,12 +266,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
               lastStatusUpdate == 0 || (statusWindow.window?.isVisible == true &&
                   (titleChanged || uptime - lastStatusUpdate >= 1)) else { return }
         lastStatusUpdate = uptime
-        let playback = sample.map { $0.isPlaying ? "재생" : "일시정지" } ?? "대기"
+        let playback = sample.map { $0.isPlaying ? "Playing" : "Paused" } ?? "Waiting"
         statusWindow.update(
             track: sample.map { "\($0.track.title) — \($0.track.artist)" } ?? "Music Lyrics Bar",
             lyric: currentText.isEmpty ? singleLine : currentText,
             status: message,
-            metrics: String(format: "%@ · 위치 %.2f초 · 조회 %d회\n재생 조회 %.1fms · 캐시 조회 %.1fms · 가사 %d줄 · 단어 타이밍 %d개",
+            metrics: String(format: "%@ · Position %.2fs · Polls %d\nPlayback %.1fms · Cache %.1fms · Lines %d · Timed spans %d",
                             playback, position, sampleCount, sampleMilliseconds, cacheMilliseconds, lyrics?.lines.count ?? 0,
                             lyrics?.lines.reduce(0) { $0 + $1.words.count } ?? 0),
             connected: isConnected)

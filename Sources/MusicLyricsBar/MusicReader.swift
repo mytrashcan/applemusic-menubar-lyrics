@@ -8,9 +8,9 @@ enum MusicReaderError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .permissionDenied: "Music 자동화 권한이 필요합니다. 시스템 설정 → 개인정보 보호 및 보안 → 자동화를 확인해 주세요."
-        case .failed(let code): "Music 재생 정보를 읽지 못했습니다 (\(code)). 다시 연결해 주세요."
-        case .invalidSample: "Music에서 올바른 재생 정보를 받지 못했습니다."
+        case .permissionDenied: "Music automation permission is required. Check System Settings → Privacy & Security → Automation."
+        case .failed(let code): "Could not read Music playback information (\(code)). Please reconnect."
+        case .invalidSample: "Music returned invalid playback information."
         }
     }
 }
