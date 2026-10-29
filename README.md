@@ -102,3 +102,7 @@ MUSIC_LYRICS_CACHE_INTEGRATION=1 bash scripts/test.sh
 로컬 캐시 접근의 선행 사례: [apple-music-lyrics](https://github.com/Takpap/apple-music-lyrics), [applyrx](https://github.com/rakei076/applyrx). 이 프로젝트는 로컬에서 확인한 캐시 구조를 바탕으로 구현했습니다.
 
 Apple과 무관한 비공식 프로젝트입니다. 가사와 관련 콘텐츠의 권리는 각 권리자에게 있습니다.
+
+## License
+
+[MIT License](LICENSE) © 2026 JEONG KITAE. 가사와 Apple 관련 콘텐츠는 이 소프트웨어의 MIT 라이선스에 포함되지 않습니다.

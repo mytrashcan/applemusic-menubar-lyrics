@@ -5,9 +5,10 @@ cd "$(dirname "$0")/.."
 swift build -c release --product MusicLyricsBar
 bin_dir="$(swift build -c release --show-bin-path)"
 app_dir="$PWD/dist/Music Lyrics Bar.app"
-mkdir -p "$app_dir/Contents/MacOS"
+mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
 cp "$bin_dir/MusicLyricsBar" "$app_dir/Contents/MacOS/MusicLyricsBar"
 cp Resources/Info.plist "$app_dir/Contents/Info.plist"
+cp LICENSE "$app_dir/Contents/Resources/LICENSE"
 codesign --force --sign - --options runtime \
     --entitlements Resources/MusicLyricsBar.entitlements "$app_dir"
 codesign --verify --strict "$app_dir"
