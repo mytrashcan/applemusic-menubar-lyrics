@@ -7,8 +7,8 @@ public enum MusicCacheError: Error, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .unavailable: "Music의 가사 캐시가 아직 없습니다. Music에서 가사를 한 번 열어 주세요."
-        case .unreadable: "Music 캐시를 읽을 수 없습니다. 접근 권한 또는 캐시 형식을 확인해 주세요."
+        case .unavailable: "No Music lyrics cache yet. Open lyrics in Music first."
+        case .unreadable: "Cannot read the Music cache. Check permissions or the cache format."
         }
     }
 }

@@ -4,7 +4,7 @@ import LyricsCore
 @MainActor
 final class StatusWindow: NSWindowController {
     private let track = NSTextField(labelWithString: "Music Lyrics Bar")
-    private let lyric = NSTextField(wrappingLabelWithString: "Music을 연결해 주세요.")
+    private let lyric = NSTextField(wrappingLabelWithString: "Connect to Music.")
     private let status = NSTextField(wrappingLabelWithString: "")
     private let metrics = NSTextField(wrappingLabelWithString: "")
     private let connectButton: NSButton
@@ -14,9 +14,9 @@ final class StatusWindow: NSWindowController {
     init(target: AnyObject, connect: Selector, reload: Selector, openMusic: Selector, changeWidth: Selector) {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 450),
                               styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
-        window.title = "Music Lyrics Bar · 상태"
+        window.title = "Music Lyrics Bar · Status"
         window.isReleasedWhenClosed = false
-        connectButton = NSButton(title: "Music 연결…", target: target, action: connect)
+        connectButton = NSButton(title: "Connect to Music…", target: target, action: connect)
         super.init(window: window)
         track.font = .systemFont(ofSize: 14, weight: .semibold)
         track.lineBreakMode = .byTruncatingTail
@@ -25,7 +25,7 @@ final class StatusWindow: NSWindowController {
         status.textColor = .secondaryLabelColor
         metrics.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         metrics.setAccessibilityIdentifier("playbackMetrics")
-        for (title, width) in [("폭 200pt", 200.0), ("폭 240pt", 240.0), ("폭 360pt", 360.0), ("폭 600pt", 600.0)] {
+        for (title, width) in [("Width 200pt", 200.0), ("Width 240pt", 240.0), ("Width 360pt", 360.0), ("Width 600pt", 600.0)] {
             widthControl.addItem(withTitle: title)
             widthControl.lastItem?.representedObject = width
         }
@@ -33,10 +33,10 @@ final class StatusWindow: NSWindowController {
         widthControl.action = changeWidth
         setWidth(UserDefaults.standard.double(forKey: "lyricsWidth"))
         let buttons = NSStackView(views: [connectButton,
-            NSButton(title: "가사 다시 읽기", target: target, action: reload),
-            NSButton(title: "Music 열기", target: target, action: openMusic), widthControl])
+            NSButton(title: "Reload Lyrics", target: target, action: reload),
+            NSButton(title: "Open Music", target: target, action: openMusic), widthControl])
         buttons.spacing = 10
-        let previewLabel = NSTextField(labelWithString: "메뉴바 미리보기 · 단어 타이밍이 있는 곡에서 밝기가 진행됩니다.")
+        let previewLabel = NSTextField(labelWithString: "Menu bar preview · Timed words brighten as they are sung.")
         previewLabel.font = .systemFont(ofSize: 11)
         previewLabel.textColor = .secondaryLabelColor
         let stack = NSStackView(views: [track, lyric, previewLabel, preview, status, metrics, buttons])
@@ -68,7 +68,7 @@ final class StatusWindow: NSWindowController {
         if self.lyric.stringValue != lyric { self.lyric.stringValue = lyric }
         if self.status.stringValue != status { self.status.stringValue = status }
         if self.metrics.stringValue != metrics { self.metrics.stringValue = metrics }
-        let buttonTitle = connected ? "Music 다시 연결" : "Music 연결…"
+        let buttonTitle = connected ? "Reconnect to Music" : "Connect to Music…"
         if connectButton.title != buttonTitle { connectButton.title = buttonTitle }
     }
 

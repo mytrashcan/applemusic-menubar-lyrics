@@ -1,12 +1,12 @@
 # Music Lyrics Bar
 
-Apple Music이 표시하는 **원본 가사**를 재생 위치에 맞춰 macOS 메뉴바에 보여 주는 네이티브 앱입니다.
+A native macOS app that displays **Apple Music’s original lyrics** in the menu bar, synchronized with playback.
 
-**상태: 초기 구현 / 실험적 캐시 연동.** 외부 가사 검색 서비스는 사용하지 않습니다. Music이 이미 내려받은 로컬 TTML 가사와 타이밍을 읽습니다. Apple의 비공개 캐시 형식에 의존하므로 macOS 또는 Music 업데이트로 동작이 달라질 수 있습니다.
+**Status: early implementation with experimental cache integration.** The app reads local TTML lyrics and timing data already downloaded by Music. It does not use external lyrics services. Apple’s cache format is private and may change with macOS or Music updates.
 
-## 시작하기
+## Getting started
 
-macOS 13 이상, Swift 6 이상이 포함된 Xcode 또는 Command Line Tools가 필요합니다.
+Building requires macOS 13 or later and Xcode or Command Line Tools with Swift 6 or later.
 
 ```sh
 git clone https://github.com/mytrashcan/applemusic-menubar-lyrics.git
@@ -16,93 +16,93 @@ bash scripts/build-app.sh
 open "dist/Music Lyrics Bar.app"
 ```
 
-1. 실행 시 열리는 상태 창에서 **Music 연결…**을 누릅니다. 메뉴바의 같은 메뉴로도 연결할 수 있습니다.
-2. macOS가 Music 자동화 권한을 요청하면 허용합니다. 앱은 현재 곡과 재생 위치를 읽습니다.
-3. Music에서 곡을 재생하고 **가사 패널을 한 번 엽니다.** Music이 이 곡의 가사를 캐시에 저장해야 합니다.
-4. 캐시가 준비되면 앱이 자동으로 다시 읽습니다. 메뉴의 **가사 캐시 다시 읽기**로 재시도할 수도 있습니다.
+1. Click **Connect to Music…** in the status window or menu bar menu.
+2. Allow Music automation when macOS prompts. The app reads the current track and playback position.
+3. Play a song in Music and **open its lyrics panel once** so Music can cache the lyrics.
+4. The app retries automatically when the cache becomes available. Use **Reload Lyrics Cache** to retry manually.
 
-빌드 결과는 `dist/Music Lyrics Bar.app`과 `dist/MusicLyricsBar.zip`입니다. 로컬 사용을 위한 ad-hoc 서명이며 Developer ID 서명 또는 공증된 배포본은 아닙니다. 테스트와 패키징은 GitHub Actions에서도 실행합니다.
+The build produces `dist/Music Lyrics Bar.app` and `dist/MusicLyricsBar.zip`. The app uses an ad-hoc signature for local use; it is not Developer ID signed or notarized. GitHub Actions also runs tests and packaging.
 
-## 구현한 동작
+## Features
 
-- 메뉴바에 현재 줄 표시, 긴 문장 자동 스크롤, 전체 줄 툴팁과 주변 가사 메뉴
-- Apple TTML의 단어·음절 타이밍에 따라 부른 부분을 밝게 표시하고 남은 부분은 흐리게 표시
-- 단어 타이밍이 있으면 현재 부르는 부분을 따라 스크롤, 줄 타이밍만 있으면 가로 왕복 스크롤
-- 상태 창에서 메뉴바 미리보기, 재생 위치, 조회 시간과 타임코드 수 확인
-- 0.5초 간격으로 Music 재생 정보 조회, 조회 사이에는 단조 시계로 위치 보간
-- 일시정지 시 보간 중지, 탐색 및 곡 변경 반영
-- 가사 사이의 빈 구간에는 이전 가사를 유지, 동시에 부르는 줄은 함께 표시
-- 제목·아티스트·앨범·재생 시간을 비교해 다른 녹음 버전의 가사 혼입 방지
-- 캐시가 없거나 권한이 거부된 상태 안내, 실패한 캐시 조회는 3초 간격으로 재시도
-- 캐시 읽기와 재생 조회를 분리하여 느린 캐시 접근 중에도 재생 위치 갱신 유지
+- Current lyrics in the menu bar, scrolling for long lines, full-text tooltips, and a nearby-lyrics menu.
+- Bright sung text and dim upcoming text using Apple TTML word or syllable timestamps.
+- Scrolling that follows the sung portion for word-timed lyrics, or moves back and forth for line-timed lyrics.
+- A status window with a menu bar preview, playback position, query durations, and timing counts.
+- Playback polling with a 0.5-second delay between samples and monotonic-clock interpolation between reads.
+- Pause, seek, and track-change handling.
+- Previous-line retention during lyric gaps and combined display of overlapping lines.
+- Track matching by title, artist, album, and duration to avoid mixing recording versions.
+- Cache and permission status messages, with failed cache lookups retried every three seconds.
+- Independent cache reads so slow cache access does not block playback polling.
 
-## 긴 가사와 메뉴바 위치
+## Long lyrics and menu bar placement
 
-메뉴 또는 상태 창의 **가사 표시 폭**에서 200·240·360·600pt를 선택할 수 있습니다. 기본값은 200pt이며, 선택한 폭은 가사 길이에 관계없이 고정됩니다. 폭을 넘는 문장은 말줄임표로 잘라 버리지 않고 가로로 이동합니다. 시스템의 ‘동작 줄이기’를 켠 경우 자동 이동과 보간 애니메이션을 생략하며 전체 가사는 툴팁과 상태 창에서 확인할 수 있습니다.
+Choose **Lyrics Width** in the menu or the width control in the status window: 200, 240, 360, or 600pt. The default is 200pt. The selected width stays fixed across lyric changes, and overflowing text scrolls instead of being replaced with an ellipsis. With the system’s Reduce Motion setting enabled, automatic ticker motion and preview transition animations are disabled. Full lyrics remain available in the tooltip and status window.
 
-**오른쪽 메뉴바** 모드는 macOS의 일반 상태 항목입니다. macOS 27.2에서 기본 `<<` 확장 버튼으로 왼쪽 영역에 펼칠 수 있지만, 이 확장은 다시 접힐 수 있으며 왼쪽 고정 표시를 보장하지 않습니다.
+The app uses a standard macOS status item. On macOS 27.2, the native `<<` overflow button can expand hidden items into the left region. This expansion can collapse again and does not provide permanent left placement.
 
-별도 고정 오버레이는 제공하지 않습니다. 메뉴바 공간이 부족하면 **200pt**를 선택하고, macOS의 확장 버튼으로 가사를 펼친 뒤 **⌘ 키를 누른 채 오른쪽으로 드래그**해 배치해 보세요. 로컬 실측에서는 오른쪽 이동 후 확장 영역을 닫거나 앱을 재실행해도 가사가 보였습니다. 폭 축소만으로는 숨김이 해결되지 않았으며, 공간이 더 부족한 환경에서는 여전히 숨겨질 수 있습니다. 표시 폭은 다음 실행에도 유지됩니다.
+If lyrics are hidden, select **200pt**, expand the native overflow area, then **hold ⌘ and drag the lyric item to the right**. In local observations, right-side placement kept lyrics visible after collapsing overflow and restarting the app. Reducing width alone did not solve hiding. Items may still be hidden when space is insufficient. Width preferences persist across launches. There is no separate fixed overlay.
 
-## 데이터 흐름과 개인정보
+## Data flow and privacy
 
 ```text
-Music.app ── Apple Events ── 현재 곡 / 재생 위치
-                                   │
-Music의 로컬 캐시 ── 읽기 전용 ── 곡 매칭 → TTML 파싱
-                                   │
-                               메뉴바 표시
+Music.app ── Apple Events ── Current track / playback position
+                                             │
+Local Music cache ── Read-only ── Track matching → TTML parsing
+                                             │
+                                      Menu bar display
 ```
 
-캐시 조회 대상:
+Cache locations:
 
 ```text
 ~/Library/Caches/com.apple.Music/Cache.db
 ~/Library/Caches/com.apple.Music/fsCachedData/
 ```
 
-앱 자체는 네트워크 요청을 하지 않습니다. 캐시 DB를 읽기 전용으로 열며 계정 토큰, 요청 헤더, 보관함 DB를 읽지 않습니다. 가사나 감상 이력을 별도 파일로 저장하거나 전송하지 않습니다. 접근성 권한과 화면 녹화 권한은 사용하지 않습니다.
+The app makes no network requests. It opens the cache database read-only and does not read account tokens, request headers, or the Music library database. It does not save or transmit lyrics or listening history. Accessibility and Screen Recording permissions are not required.
 
-`LyricsCore`는 가사 모델, Apple TTML 파서, 재생 시계와 SQLite 캐시 조회를 담당합니다. `MusicLyricsBar`는 직렬 actor에서 Apple Events 및 캐시 조회를 수행하고, 메인 스레드에서 AppKit 메뉴바 UI를 갱신합니다. 외부 패키지 의존성은 없습니다.
+`LyricsCore` contains lyric models, the Apple TTML parser, the playback clock, and SQLite cache access. `MusicLyricsBar` performs Apple Events and cache reads in serial actors and updates the AppKit UI on the main thread. There are no third-party package dependencies.
 
-## 검증
+## Validation
 
 ```sh
-# 합성 가사와 임시 SQLite DB를 사용하는 결정적 단위 테스트
+# Deterministic tests with synthetic lyrics and temporary SQLite databases
 bash scripts/test.sh
 
-# 선택: 이 Mac의 실제 Music 캐시도 읽어서 파싱·매칭 검증
+# Optional: verify parsing and matching against this Mac’s Music cache
 MUSIC_LYRICS_CACHE_INTEGRATION=1 bash scripts/test.sh
 ```
 
-테스트는 시간 형식, 단어 span과 줄바꿈, Unicode·엔티티의 단어 범위, 단어 진행률, 줄 사이 가사 유지, 메타데이터 제외, 잘못된 XML, 겹치는 가사, 일시정지와 역방향 탐색, 캐시 미스 후 재시도, 잘못된 곡 매칭, 캐시의 읽기 전용 접근 및 파일 경로 검증을 다룹니다. Music 연동 스크립트는 실행 없이 사전 컴파일하여 문법도 검증합니다. 저장소의 테스트 데이터는 합성 텍스트만 포함합니다. 선택적 로컬 통합 테스트는 가사나 곡 제목을 출력하지 않습니다.
+Tests cover time formats, timed spans and line breaks, Unicode and entity ranges, word progress, gap retention, metadata exclusion, malformed XML, overlapping lyrics, pauses and backward seeks, cache-miss retries, recording mismatches, read-only cache access, and file-path checks. The Music script is compiled without execution to check its syntax. Repository fixtures contain only synthetic text. The optional local integration test does not print lyrics or track titles.
 
-실제 재생 중 가사 일치, 일시정지 시 위치 유지, 앞뒤 탐색, 곡 변경, Music 숨김 후 갱신을 확인했습니다. 단어 타이밍 513개가 있는 실제 곡에서 부른 부분과 남은 부분의 밝기 차이도 확인했습니다. 이 관측은 오디오 출력에 대한 밀리초 단위 동기화 측정은 아닙니다. 추가 수동 확인 항목은 다음과 같습니다.
+Local playback checks confirmed lyric agreement, stable paused positions, forward and backward seeks, track changes, and continued updates with Music hidden. A source with 513 timed spans showed bright sung text and dim upcoming words. These observations are not a millisecond-level sound-to-screen latency benchmark. Further manual checks include:
 
-- Music 재생 중 메뉴바 줄과 Music의 가사 줄 비교
-- 일시정지, 앞뒤 탐색 및 곡 변경
-- 가사를 캐시에 저장한 뒤 Music 창을 뒤로 보내거나 최소화
-- 자동화 권한 거부 후 다시 연결
+- Comparing the menu bar line with Music’s highlighted lyric during playback.
+- Pausing, seeking in both directions, and changing tracks.
+- Hiding or minimizing Music after its lyrics are cached.
+- Denying automation permission and reconnecting afterward.
 
-구체적인 관측과 남은 한계는 [실측 기록](docs/VALIDATION.md)에 정리했습니다.
+See the [local validation report](docs/VALIDATION.md) for observations and remaining limits.
 
-## 현재 한계
+## Current limitations
 
-- Music이 내려받지 않은 가사는 가져올 수 없습니다. 앱이 직접 가사 API에 요청하지 않습니다.
-- 최근 가사 관련 캐시 응답 최대 512개를 조회합니다. 오래된 캐시만 남아 있으면 Music에서 가사를 다시 열어 주세요.
-- 곡 메타데이터가 캐시와 다르거나 별도 형식으로 저장되면 매칭에 실패할 수 있습니다. 추측한 다른 곡의 가사를 대신 표시하지 않습니다.
-- 단어·음절 타임코드가 있는 곡만 단어별 하이라이트를 표시합니다. 타임코드가 없으면 단어 시점을 임의로 생성하지 않고 줄 전체를 표시합니다. 번역·발음 표시는 구현하지 않았습니다.
-- 한 span이 여러 글자를 포함하면 span 안에서 밝기 진행을 보간합니다. Apple이 글자마다 별도 타임코드를 제공하는 것은 아닙니다.
-- 실제 환경에서 첫 캐시 조회가 수십 초 걸린 사례가 있습니다. 재생 위치 조회는 별도로 계속하며, 캐시가 준비된 후 가사를 표시합니다.
-- 첫 실행마다 연결 메뉴를 사용합니다. 자동 실행·설정 저장·공증된 설치본은 아직 제공하지 않습니다.
-- Music 캐시 형식은 공개 API가 아닙니다. App Store 배포 가능 여부는 검증하지 않았습니다.
+- Lyrics must already be downloaded by Music. The app does not request lyrics from an API.
+- At most 512 recent lyrics-related cache responses are scanned. Reopen lyrics in Music if only older cache entries remain.
+- Metadata differences or unsupported cache formats may prevent matching. The app does not substitute lyrics from a guessed track.
+- Word highlighting requires word or syllable timestamps. Sources without them use line-level display. Translation and pronunciation display are not implemented.
+- Progress within a multi-character span is interpolated; Apple does not necessarily provide a timestamp for each character.
+- Initial cache reads have taken tens of seconds in local observations. Playback polling continues independently while lyrics load.
+- Connect to Music after each launch. Launch at login and a notarized installer are not provided. The width preference is saved.
+- The Music cache is not a public API. App Store distribution has not been evaluated.
 
-## 참고
+## References
 
-로컬 캐시 접근의 선행 사례: [apple-music-lyrics](https://github.com/Takpap/apple-music-lyrics), [applyrx](https://github.com/rakei076/applyrx). 이 프로젝트는 로컬에서 확인한 캐시 구조를 바탕으로 구현했습니다.
+Prior local-cache projects: [apple-music-lyrics](https://github.com/Takpap/apple-music-lyrics) and [applyrx](https://github.com/rakei076/applyrx). This implementation is based on cache structures inspected locally.
 
-Apple과 무관한 비공식 프로젝트입니다. 가사와 관련 콘텐츠의 권리는 각 권리자에게 있습니다.
+This is an unofficial project, unaffiliated with Apple. Lyrics and related content belong to their respective rights holders.
 
 ## License
 
-[MIT License](LICENSE) © 2026 JEONG KITAE. 가사와 Apple 관련 콘텐츠는 이 소프트웨어의 MIT 라이선스에 포함되지 않습니다.
+[MIT License](LICENSE) © 2026 JEONG KITAE. Lyrics and Apple-related content are not covered by this software’s MIT license.
