@@ -33,3 +33,26 @@ The latest opt-in scan verified 18 local cached song responses. Earlier scans ve
 - The app keeps native menu-bar placement. Native overflow expansion does not establish permanent left placement, and an item can still be hidden when menu-bar space is insufficient. No separate overlay is included.
 - Fullscreen, multiple displays, long-duration stability, and the minimum supported macOS version still need separate validation. Hiding Music was tested; minimizing and fullscreen behavior are not established by that test.
 - Sources without timed words retain line-level display. Progress within a multi-character span is interpolation, not an independently verified timestamp for each character.
+
+## Compact fixed-width placement experiment
+
+The app now reserves the selected width across lyric changes, with a new 200pt
+option and a 200pt default for fresh preferences. Existing saved widths remain
+available. The accessibility identifier and label stay fixed; the current lyric
+is exposed as the accessibility value.
+
+- At 200pt in the original leftmost status-item position, the item still entered
+  native overflow after other status items appeared. Width reduction alone did
+  not solve hiding on this machine.
+- The user Command-dragged the lyric item to the right of ChatGPT. With the native
+  overflow area collapsed, both short and long Japanese lyric lines remained
+  visible; long text scrolled within the fixed viewport with word shading.
+- The item remained visible in observed ChatGPT and Goodnotes foreground states.
+  This is a small set of observed layouts, not a guarantee for every app menu.
+- After terminating and relaunching the app process once, 200pt and the user's
+  right-side placement persisted. Reconnecting loaded 47 lines and 257 timed
+  spans, and the lyric item stayed outside the collapsed overflow area.
+
+This supports compact width plus user-controlled right-side placement as a
+practical mitigation on the tested layout. It does not establish an always-visible
+API or behavior under arbitrary icon counts, display changes, or fullscreen.

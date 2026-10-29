@@ -25,7 +25,7 @@ final class StatusWindow: NSWindowController {
         status.textColor = .secondaryLabelColor
         metrics.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         metrics.setAccessibilityIdentifier("playbackMetrics")
-        for (title, width) in [("폭 240pt", 240.0), ("폭 360pt", 360.0), ("폭 600pt", 600.0)] {
+        for (title, width) in [("폭 200pt", 200.0), ("폭 240pt", 240.0), ("폭 360pt", 360.0), ("폭 600pt", 600.0)] {
             widthControl.addItem(withTitle: title)
             widthControl.lastItem?.representedObject = width
         }
@@ -84,7 +84,7 @@ final class StatusWindow: NSWindowController {
     }
 
     func setWidth(_ width: Double) {
-        let index = [240.0, 360.0, 600.0].firstIndex(of: width) ?? 1
+        let index = [200.0, 240.0, 360.0, 600.0].firstIndex(of: width) ?? 0
         widthControl.selectItem(at: index)
     }
 

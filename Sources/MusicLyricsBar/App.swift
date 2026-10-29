@@ -39,6 +39,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         item.autosaveName = "MusicLyricsBar.Lyrics"
         if let button = item.button {
             button.imagePosition = .imageOnly
+            button.setAccessibilityIdentifier("MusicLyricsBar.Lyrics")
+            button.setAccessibilityLabel("Music Lyrics Bar")
         }
         let menu = NSMenu()
         menu.delegate = self
@@ -87,11 +89,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         addAction("상태 보기", action: #selector(showStatus), to: menu)
         let widthItem = NSMenuItem(title: "가사 표시 폭", action: nil, keyEquivalent: "")
         let widths = NSMenu()
-        for (title, width) in [("좁게 · 240pt", 240.0), ("보통 · 360pt", 360.0), ("넓게 · 600pt", 600.0)] {
+        for (title, width) in [("컴팩트 · 200pt", 200.0), ("좁게 · 240pt", 240.0), ("보통 · 360pt", 360.0), ("넓게 · 600pt", 600.0)] {
             let entry = NSMenuItem(title: title, action: #selector(changeWidth(_:)), keyEquivalent: "")
             entry.target = self
             entry.representedObject = width
-            entry.state = maximumWidth == width ? .on : .off
+            entry.state = displayWidth == width ? .on : .off
             widths.addItem(entry)
         }
         widthItem.submenu = widths
@@ -199,9 +201,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func quit() { NSApp.terminate(nil) }
 
-    private var maximumWidth: Double {
+    private var displayWidth: Double {
         let saved = UserDefaults.standard.double(forKey: "lyricsWidth")
-        return [240.0, 360.0, 600.0].contains(saved) ? saved : 360
+        return [200.0, 240.0, 360.0, 600.0].contains(saved) ? saved : 200
     }
 
     @objc private func changeWidth(_ sender: NSMenuItem) {
@@ -243,12 +245,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let titleChanged = displayedTitle != singleLine
         if titleChanged {
             displayedTitle = singleLine
-            button?.setAccessibilityLabel("Music Lyrics Bar: " + singleLine)
-            // Keep a predictable width so lyrics do not crowd other menu bar controls.
-            let width = (singleLine as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13)]).width + 34
-            let available = (button?.window?.screen ?? NSScreen.main)?.visibleFrame.width ?? 1000
-            item.length = min(max(80, width), min(maximumWidth, available * 0.45))
+            button?.setAccessibilityValue(singleLine)
         }
+        // Reserve the same space for every line so lyric changes do not grow
+        // the status item into the system overflow area.
+        let screenWidth = (button?.window?.screen ?? NSScreen.main)?.frame.width ?? 1000
+        let length = min(displayWidth, screenWidth * 0.45)
+        if item.length != length { item.length = length }
         let tooltip = currentText.isEmpty ? message : currentText
         if let image = statusImageRenderer.image(lines: lines, fallback: singleLine, position: position,
                                                  isPlaying: sample?.isPlaying ?? false,
