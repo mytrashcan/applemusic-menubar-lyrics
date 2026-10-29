@@ -1,0 +1,22 @@
+name: macOS checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test-and-build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: swift --version
+      - name: Unit tests (synthetic lyrics only)
+        run: bash scripts/test.sh
+      - name: Package app
+        run: bash scripts/build-app.sh
+      - name: Upload local-use app
+        uses: actions/upload-artifact@v4
+        with:
+          name: MusicLyricsBar-macOS
+          path: dist/MusicLyricsBar.zip
