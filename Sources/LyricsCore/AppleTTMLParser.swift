@@ -41,9 +41,17 @@ public enum AppleTTMLParser {
 }
 
 private final class TimedTextDelegate: NSObject, XMLParserDelegate {
+    private struct Span {
+        let start: Double?
+        let end: Double?
+        let offset: Int
+        var hasTimedChild = false
+    }
     var lines: [LyricLine] = []
     private var inBody = false
     private var paragraph: (start: Double?, end: Double?, text: String)?
+    private var words: [LyricWord] = []
+    private var spans: [Span] = []
 
     func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
                 qualifiedName: String?, attributes: [String: String]) {
@@ -56,6 +64,18 @@ private final class TimedTextDelegate: NSObject, XMLParserDelegate {
                 end = start + duration
             }
             paragraph = (start, end, "")
+            words = []
+            spans = []
+        } else if name == "span", let paragraph {
+            let start = attributes["begin"].flatMap(AppleTTMLParser.seconds)
+            var end = attributes["end"].flatMap(AppleTTMLParser.seconds)
+            if end == nil, let start, let duration = attributes["dur"].flatMap(AppleTTMLParser.seconds) {
+                end = start + duration
+            }
+            if let start, let end, end > start {
+                for index in spans.indices { spans[index].hasTimedChild = true }
+            }
+            spans.append(Span(start: start, end: end, offset: paragraph.text.utf16.count))
         } else if name == "br" {
             paragraph?.text += "\n"
         }
@@ -66,11 +86,25 @@ private final class TimedTextDelegate: NSObject, XMLParserDelegate {
     }
 
     func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) {
+        if name == "span", let span = spans.popLast(), let paragraph,
+           !span.hasTimedChild, let start = span.start, let end = span.end, end > start {
+            let length = paragraph.text.utf16.count - span.offset
+            if length > 0 {
+                words.append(LyricWord(start: start, end: end, range: NSRange(location: span.offset, length: length)))
+            }
+        }
         if name == "p", let current = paragraph {
             let text = current.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if let start = current.start, let end = current.end,
                end > start, !text.isEmpty {
-                lines.append(LyricLine(start: start, end: end, text: text))
+                let contentRange = (current.text as NSString).range(of: text)
+                let adjustedWords = words.compactMap { word -> LyricWord? in
+                    let range = NSIntersectionRange(word.range, contentRange)
+                    guard range.length > 0 else { return nil }
+                    return LyricWord(start: word.start, end: word.end,
+                                     range: NSRange(location: range.location - contentRange.location, length: range.length))
+                }.sorted { $0.range.location < $1.range.location }
+                lines.append(LyricLine(start: start, end: end, text: text, words: adjustedWords))
             }
             paragraph = nil
         }

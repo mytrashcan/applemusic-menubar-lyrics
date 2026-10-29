@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import LyricsCore
 
@@ -56,5 +57,40 @@ struct TimedLyricsTests {
         #expect(paused.position(at: 110) == 4)
         let end = PlaybackSample(track: track, position: 29.8, isPlaying: true, sampledAt: 100)
         #expect(end.position(at: 101) == 30)
+    }
+
+    @Test func testDisplayHoldsPreviousLineThroughGapAndResolvesSeeks() {
+        let first = LyricLine(start: 2, end: 4, text: "First synthetic line")
+        let next = LyricLine(start: 7, end: 9, text: "Next synthetic line")
+        let lyrics = Lyrics(lines: [first, next])
+        #expect(lyrics.displayLines(at: 1).isEmpty)
+        #expect(lyrics.activeLines(at: 5).isEmpty)
+        #expect(lyrics.displayLines(at: 4) == [first])
+        #expect(lyrics.displayLines(at: 6.99) == [first])
+        #expect(lyrics.displayLines(at: 7) == [next])
+        #expect(lyrics.displayLines(at: 15) == [next])
+        #expect(lyrics.displayLines(at: 3) == [first])
+        #expect(lyrics.displayLines(at: 0).isEmpty)
+        #expect(lyrics.displayLines(at: .nan).isEmpty)
+    }
+
+    @Test func testWordTimingRangesUnicodeEntitiesAndNestedSpans() throws {
+        let xml = """
+        <tt><body><p begin="1" end="6">  <span begin="1" end="2">音🎵</span> <span begin="3" end="5"><span>two &amp; three</span></span> </p></body></tt>
+        """
+        let line = try #require(AppleTTMLParser.parse(xml).lines.first)
+        #expect(line.text == "音🎵 two & three")
+        #expect(line.words.count == 2)
+        let first = try #require(line.words.first)
+        let second = try #require(line.words.last)
+        #expect((line.text as NSString).substring(with: first.range) == "音🎵")
+        #expect((line.text as NSString).substring(with: second.range) == "two & three")
+        #expect(first.progress(at: 0) == 0)
+        #expect(first.progress(at: 1.5) == 0.5)
+        #expect(first.progress(at: 2.5) == 1)
+        #expect(second.progress(at: 2.5) == 0)
+        #expect(second.progress(at: 4) == 0.5)
+        #expect(second.progress(at: 6) == 1)
+        #expect(second.progress(at: 3) == 0)
     }
 }

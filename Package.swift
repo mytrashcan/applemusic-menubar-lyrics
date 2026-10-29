@@ -13,6 +13,6 @@ let package = Package(
         .target(name: "LyricsCore", dependencies: ["CSQLite"]),
         .executableTarget(name: "MusicLyricsBar", dependencies: ["LyricsCore"]),
         .testTarget(name: "LyricsCoreTests", dependencies: ["LyricsCore", "CSQLite"]),
-        .testTarget(name: "MusicLyricsBarTests", dependencies: ["MusicLyricsBar"])
+        .testTarget(name: "MusicLyricsBarTests", dependencies: ["MusicLyricsBar", "LyricsCore"])
     ]
 )
