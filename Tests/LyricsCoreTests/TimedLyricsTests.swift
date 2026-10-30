@@ -74,6 +74,17 @@ struct TimedLyricsTests {
         #expect(lyrics.displayLines(at: .nan).isEmpty)
     }
 
+    @Test func nextBoundaryIncludesOverlapEndsAndSeekBoundaries() {
+        let lyrics = Lyrics(lines: [LyricLine(start: 2, end: 8, text: "A"),
+                                    LyricLine(start: 5, end: 6, text: "B")])
+        #expect(lyrics.nextLineBoundary(after: 0) == 2)
+        #expect(lyrics.nextLineBoundary(after: 2) == 5)
+        #expect(lyrics.nextLineBoundary(after: 5) == 6)
+        #expect(lyrics.nextLineBoundary(after: 6) == 8)
+        #expect(lyrics.nextLineBoundary(after: 8) == nil)
+        #expect(lyrics.nextLineBoundary(after: .nan) == nil)
+    }
+
     @Test func testWordTimingRangesUnicodeEntitiesAndNestedSpans() throws {
         let xml = """
         <tt><body><p begin="1" end="6">  <span begin="1" end="2">音🎵</span> <span begin="3" end="5"><span>two &amp; three</span></span> </p></body></tt>

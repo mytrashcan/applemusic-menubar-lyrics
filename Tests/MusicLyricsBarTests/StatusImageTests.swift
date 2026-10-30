@@ -19,6 +19,24 @@ struct StatusImageTests {
         #expect(try textAlpha(partial) < textAlpha(complete))
     }
 
+    @MainActor @Test func schedulesOnlyVisibleMotionAndReusesUnchangedPixels() throws {
+        let renderer = StatusImageRenderer()
+        let line = LyricLine(start: 0, end: 12, text: "Alpha Beta", words: [
+            LyricWord(start: 2, end: 3, range: NSRange(location: 0, length: 5)),
+            LyricWord(start: 7, end: 8, range: NSRange(location: 6, length: 4))
+        ])
+        let size = NSSize(width: 200, height: 24)
+        _ = try #require(renderer.image(lines: [line], fallback: "", position: 0, isPlaying: true, size: size))
+        #expect(renderer.nextUpdateDelay(at: 0, isPlaying: true, width: 200) == 2)
+        #expect(renderer.nextUpdateDelay(at: 2.5, isPlaying: true, width: 200) == 0.1)
+        #expect(renderer.nextUpdateDelay(at: 4, isPlaying: true, width: 200) == 3)
+        #expect(renderer.nextUpdateDelay(at: 9, isPlaying: true, width: 200) == nil)
+        #expect(renderer.nextUpdateDelay(at: 2.5, isPlaying: false, width: 200) == nil)
+        #expect(renderer.image(lines: [line], fallback: "", position: 1, isPlaying: true, size: size) == nil)
+        _ = try #require(renderer.image(lines: [line], fallback: "", position: 2.5, isPlaying: true, size: size))
+        #expect(renderer.image(lines: [line], fallback: "", position: 2.50000001, isPlaying: true, size: size) == nil)
+    }
+
     @MainActor private func textAlpha(_ image: NSImage) throws -> Double {
         let data = try #require(image.tiffRepresentation)
         let bitmap = try #require(NSBitmapImageRep(data: data))

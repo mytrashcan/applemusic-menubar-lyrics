@@ -13,6 +13,7 @@ struct LyricTextLayout {
     let text: String
     let runs: [Run]
     let width: CGFloat
+    let height: CGFloat
     let hasWordTiming: Bool
     let duration: Double
 
@@ -26,7 +27,9 @@ struct LyricTextLayout {
         hasWordTiming = lines.contains { !$0.words.isEmpty }
         duration = lines.map { $0.end - $0.start }.max() ?? 8
         let attributes: [NSAttributedString.Key: Any] = [.font: Self.font]
-        width = (text as NSString).size(withAttributes: attributes).width + 6
+        let textSize = (text as NSString).size(withAttributes: attributes)
+        width = textSize.width + 6
+        height = textSize.height
         var result: [Run] = []
         var prefix = !isPlaying && !lines.isEmpty ? "Ⅱ " : ""
         if !prefix.isEmpty {
