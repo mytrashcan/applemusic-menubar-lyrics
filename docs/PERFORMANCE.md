@@ -1,4 +1,4 @@
-# Resource optimization — preliminary validation, 2026-10-30
+# Resource optimization — measured 2026-10-30–31
 
 Environment: macOS 27.2 (26B123), Apple Silicon. Measurements use release builds
 on one development machine. CPU is a percentage of one core derived from process
@@ -37,9 +37,11 @@ paused samples used the same recording, but different positions.
 - Release JSON payload objects between cache rows. Check cancellation before
   queued cache work opens a database and between rows of a scan.
 
-## Verified so far
+## Verified behavior
 
-- Nineteen deterministic tests passed. Coverage includes native Apple Event
+- Twenty deterministic tests passed, plus the opt-in local-cache integration
+  test (19 cached responses parsed without exporting lyrics). Coverage includes
+  status-window/controller/view release, native Apple Event
   references and replies, automation denial, pixel shading, unchanged-frame reuse,
   word-gap scheduling, overlapping-line boundaries, and cancelled cache reads.
 - Direct property reads were observed against Music: a paused position of 99.45s
@@ -69,16 +71,46 @@ read Music, cached lyrics, or listening history.
 The renderer used 55.5% less CPU time in this run. This isolates image
 rendering; it does not establish the same reduction for the whole app or Music.
 
-## Pending live verification
+## Whole-app observations
 
-The Mac became locked before final playback measurements. The UI tool requires
-manual unlocking. A local-cache integration run and independent SQLite and plain
-read-only file probes remain pending on the real Music cache. A sampled app thread
-was blocked in the system file-open path. Closing Music did not release the probes.
-Whether the lock is the cause has not been established.
+| Optimized state | Duration | CPU, one core | Median physical footprint | Median RSS |
+| --- | ---: | ---: | ---: | ---: |
+| Disconnected, window open | 20s | <0.001% | 19.97 MiB | 84.25 MiB |
+| Paused, timed lyrics loaded, window open | 30s | 0.005% | 24.27 MiB | 98.23 MiB |
+| Playing, timed lyrics loaded, window open | 30s | 0.226% | 25.67 MiB | 103.20 MiB |
+| Playing, timed lyrics loaded, window closed | 60s | 0.049% | 26.49 MiB | 99.53 MiB |
+| Fresh launch, playing, timed lyrics loaded, window never opened | 60s | 0.163% | 14.69 MiB | 79.58 MiB |
+| Same fresh process, paused, window never opened | 30s | 0.003% | 14.69 MiB | 80.88 MiB |
 
-Live timed-lyrics rendering, full-app playback CPU and footprint, closed-window
-resource use, cold background launch, seek responsiveness, and a multi-track soak
-must still be verified after unlocking. The optimization goal remains open.
+The closed-window sample included a natural track transition. Its maximum physical
+footprint was 26.99 MiB; the fresh-launch sample peaked at 15.22 MiB.
+The different runs show that working-set history and song position matter.
+These are short observations, not long-term leak or
+energy measurements. The baseline and optimized visible-window samples used the
+same recording at different positions and durations; no precise whole-app
+improvement percentage is inferred. RSS did not consistently decrease. The smaller
+physical footprint is the relevant observed memory result, not a claim of zero RAM.
+
+Original timed lyrics, progressive word shading, line changes, pause/resume,
+seeking, and track changes were observed on the optimized build. Closing the
+status window left the native menu bar updating. On a fresh launch on October 31,
+the app reconnected without constructing its status window and displayed timed
+lyrics. The default 200pt viewport and scrolling keep image allocations bounded;
+macOS can still place the item in its overflow area when the menu bar is crowded.
+
+## Cache-open limitation
+
+Some initial cache opens were exceptionally slow during this session. A sampled
+thread was blocked in the system file-open path. Independent SQLite and plain
+read-only file probes also blocked, so this was not established as parser work or
+an optimization regression. Pending probes eventually completed after unlocking;
+a later app lookup took about 649 seconds and completed after Music was brought
+forward. Neither event establishes the cause. A warm track lookup took 19.4ms,
+and a subsequent local-cache integration run completed in 0.117s.
+
+A separate cold paused sample used 13.52 MiB physical footprint while the cache was
+still loading; it is excluded from the loaded-lyrics table. No security settings
+or file attributes were changed. Initial cache availability remains a limitation;
+these resource measurements do not establish an upper bound on loading latency.
 
 Raw local profiles and listening data are not included in the repository.

@@ -58,6 +58,8 @@ python3 scripts/measure-process.py <PID> --seconds 60
 
 The helper reports CPU as a percentage of one core and physical footprint separately from RSS. Shared resident framework pages mean RSS is not the same as the app’s physical memory footprint. Playback, pauses, and visible diagnostic windows should be measured separately.
 
+See [measured results and limitations](docs/PERFORMANCE.md) for playback, pause, and cold-launch observations.
+
 ## Data flow and privacy
 
 ```text
