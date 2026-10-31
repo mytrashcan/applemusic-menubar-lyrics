@@ -18,4 +18,4 @@ Screenshots show a moment in playback, not a timing or performance benchmark.
 
 The displayed recording is 百花繚乱 by Lilas. Lyrics and Apple-related content
 remain the property of their respective rights holders and are not covered by
-the repository's MIT software license. Do not use these images as test fixtures.
+the repository's WTFPL software license. Do not use these images as test fixtures.

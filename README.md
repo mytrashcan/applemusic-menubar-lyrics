@@ -9,7 +9,7 @@ Original lyrics, live word highlighting, and a little less window switching.
 [![macOS checks](https://github.com/mytrashcan/applemusic-menubar-lyrics/actions/workflows/ci.yml/badge.svg)](https://github.com/mytrashcan/applemusic-menubar-lyrics/actions/workflows/ci.yml)
 [![macOS 13+](https://img.shields.io/badge/macOS-13%2B-24292f?logo=apple&logoColor=white)](#getting-started)
 [![Swift 6+](https://img.shields.io/badge/Swift-6%2B-F05138?logo=swift&logoColor=white)](#build-from-source)
-[![MIT](https://img.shields.io/badge/License-MIT-6e56cf)](LICENSE)
+[![WTFPL v2](https://img.shields.io/badge/License-WTFPL_v2-6e56cf)](LICENSE)
 
 [**Download**](https://github.com/mytrashcan/applemusic-menubar-lyrics/releases/latest) · [**Get started**](#getting-started) · [**Join the conversation**](https://github.com/mytrashcan/applemusic-menubar-lyrics/discussions)
 
@@ -234,8 +234,8 @@ This is an unofficial project, unaffiliated with Apple. Lyrics and related conte
 
 <div align="center">
 
-[MIT License](LICENSE) © 2026 JEONG KITAE
+[WTFPL v2](LICENSE) · Copyright © 2026 JEONG KITAE
 
-<sub>Unofficial. Not affiliated with Apple. Lyrics and Apple-related content belong to their respective rights holders and are not covered by this software's MIT license.</sub>
+<sub>Unofficial. Not affiliated with Apple. Lyrics and Apple-related content belong to their respective rights holders and are not covered by this software's WTFPL license.</sub>
 
 </div>
