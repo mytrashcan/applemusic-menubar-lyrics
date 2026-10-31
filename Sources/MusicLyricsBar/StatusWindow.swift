@@ -2,13 +2,14 @@ import AppKit
 import LyricsCore
 
 @MainActor
-final class StatusWindow: NSWindowController {
+final class StatusWindow: NSWindowController, NSWindowDelegate {
+    var onClose: (() -> Void)?
     private let track = NSTextField(labelWithString: "Music Lyrics Bar")
     private let lyric = NSTextField(wrappingLabelWithString: "Connect to Music.")
     private let status = NSTextField(wrappingLabelWithString: "")
     private let metrics = NSTextField(wrappingLabelWithString: "")
     private let connectButton: NSButton
-    private let preview = StatusLyricView(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
+    private let preview = NSImageView()
     private let widthControl = NSPopUpButton(frame: .zero, pullsDown: false)
 
     init(target: AnyObject, connect: Selector, reload: Selector, openMusic: Selector, changeWidth: Selector) {
@@ -18,6 +19,10 @@ final class StatusWindow: NSWindowController {
         window.isReleasedWhenClosed = false
         connectButton = NSButton(title: "Connect to Music…", target: target, action: connect)
         super.init(window: window)
+        window.delegate = self
+        preview.imageScaling = .scaleNone
+        preview.imageAlignment = .alignLeft
+        preview.contentTintColor = .labelColor
         track.font = .systemFont(ofSize: 14, weight: .semibold)
         track.lineBreakMode = .byTruncatingTail
         lyric.font = .systemFont(ofSize: 21, weight: .medium)
@@ -34,7 +39,8 @@ final class StatusWindow: NSWindowController {
         setWidth(UserDefaults.standard.double(forKey: "lyricsWidth"))
         let buttons = NSStackView(views: [connectButton,
             NSButton(title: "Reload Lyrics", target: target, action: reload),
-            NSButton(title: "Open Music", target: target, action: openMusic), widthControl])
+            NSButton(title: "Open Music", target: target, action: openMusic), widthControl,
+            NSButton(title: "Close", target: self, action: #selector(closeStatus))])
         buttons.spacing = 10
         let previewLabel = NSTextField(labelWithString: "Menu bar preview · Timed words brighten as they are sung.")
         previewLabel.font = .systemFont(ofSize: 11)
@@ -68,7 +74,7 @@ final class StatusWindow: NSWindowController {
         if self.lyric.stringValue != lyric { self.lyric.stringValue = lyric }
         if self.status.stringValue != status { self.status.stringValue = status }
         if self.metrics.stringValue != metrics { self.metrics.stringValue = metrics }
-        let buttonTitle = connected ? "Reconnect to Music" : "Connect to Music…"
+        let buttonTitle = connected ? "Reconnect" : "Connect to Music…"
         if connectButton.title != buttonTitle { connectButton.title = buttonTitle }
     }
 
@@ -78,9 +84,13 @@ final class StatusWindow: NSWindowController {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    func updateKaraoke(lines: [LyricLine], fallback: String, position: Double, isPlaying: Bool) {
-        guard window?.isVisible == true else { return }
-        preview.update(lines: lines, fallback: fallback, position: position, isPlaying: isPlaying)
+    @objc private func closeStatus() { window?.performClose(nil) }
+
+    func windowWillClose(_ notification: Notification) { onClose?() }
+
+    func updatePreview(image: NSImage?) {
+        guard window?.isVisible == true, preview.image !== image else { return }
+        preview.image = image
     }
 
     func setWidth(_ width: Double) {

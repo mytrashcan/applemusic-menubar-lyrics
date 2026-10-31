@@ -94,3 +94,16 @@ final class MusicCacheTests {
         }
     }
 }
+
+struct CacheCancellationTests {
+    @Test func cancelledReadDoesNotOpenTheDatabase() async {
+        let cache = MusicCache(directory: URL(fileURLWithPath: "/nonexistent-music-cache"))
+        let track = Track(id: "cancelled", title: "Synthetic", artist: "Test", album: "", duration: 30)
+        let task = Task {
+            while !Task.isCancelled { await Task.yield() }
+            #expect(throws: CancellationError.self) { try cache.lyrics(for: track) }
+        }
+        task.cancel()
+        await task.value
+    }
+}

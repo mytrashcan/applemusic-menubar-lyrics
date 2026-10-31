@@ -25,6 +25,7 @@ public struct MusicCache: Sendable {
     }
 
     public func lyrics(for track: Track) throws -> Lyrics? {
+        try Task.checkCancellation()
         let database = directory.appendingPathComponent("Cache.db")
         guard FileManager.default.fileExists(atPath: database.path) else { throw MusicCacheError.unavailable }
         var connection: OpaquePointer?
@@ -33,6 +34,7 @@ public struct MusicCache: Sendable {
             throw MusicCacheError.unreadable
         }
         defer { sqlite3_close(connection) }
+        try Task.checkCancellation()
         sqlite3_busy_timeout(connection, 250)
 
         // Bound work on large caches. Missing or evicted payloads are ordinary cache misses.
@@ -49,28 +51,36 @@ public struct MusicCache: Sendable {
         defer { sqlite3_finalize(statement) }
 
         while true {
+            try Task.checkCancellation()
             let result = sqlite3_step(statement)
             if result == SQLITE_DONE { return nil }
             guard result == SQLITE_ROW else { throw MusicCacheError.unreadable }
-            guard let payload = payload(from: statement),
-                  let root = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
-                  let songs = root["data"] as? [[String: Any]] else { continue }
-            for song in songs {
-                guard Self.matches(song, track: track),
-                      let relationships = song["relationships"] as? [String: Any] else { continue }
-                for key in ["syllable-lyrics", "lyrics"] {
-                    guard let relationship = relationships[key] as? [String: Any],
-                          let records = relationship["data"] as? [[String: Any]] else { continue }
-                    for record in records {
-                        guard let attributes = record["attributes"] as? [String: Any] else { continue }
-                        for field in ["ttml", "ttmlLocalizations"] {
-                            if let xml = attributes[field] as? String,
-                               let lyrics = try? AppleTTMLParser.parse(xml) { return lyrics }
-                        }
+            if let lyrics = autoreleasepool(invoking: { () -> Lyrics? in
+                guard let payload = payload(from: statement) else { return nil }
+                return Self.parse(payload, for: track)
+            }) { return lyrics }
+        }
+    }
+
+    private static func parse(_ payload: Data, for track: Track) -> Lyrics? {
+        guard let root = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+              let songs = root["data"] as? [[String: Any]] else { return nil }
+        for song in songs {
+            guard matches(song, track: track),
+                  let relationships = song["relationships"] as? [String: Any] else { continue }
+            for key in ["syllable-lyrics", "lyrics"] {
+                guard let relationship = relationships[key] as? [String: Any],
+                      let records = relationship["data"] as? [[String: Any]] else { continue }
+                for record in records {
+                    guard let attributes = record["attributes"] as? [String: Any] else { continue }
+                    for field in ["ttml", "ttmlLocalizations"] {
+                        if let xml = attributes[field] as? String,
+                           let lyrics = try? AppleTTMLParser.parse(xml) { return lyrics }
                     }
                 }
             }
         }
+        return nil
     }
 
     private func payload(from statement: OpaquePointer?) -> Data? {

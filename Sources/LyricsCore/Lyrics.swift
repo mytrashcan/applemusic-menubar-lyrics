@@ -61,6 +61,17 @@ public struct Lyrics: Equatable, Sendable {
         return lines.filter { $0.start <= position && position < $0.end }
     }
 
+    /// Next time the displayed line set may change, including overlapping voices.
+    public func nextLineBoundary(after position: TimeInterval) -> TimeInterval? {
+        guard position.isFinite, position >= 0 else { return nil }
+        var next = TimeInterval.infinity
+        for line in lines {
+            if line.start > position { next = min(next, line.start) }
+            if line.end > position { next = min(next, line.end) }
+        }
+        return next.isFinite ? next : nil
+    }
+
     /// Keep the last lyric through gaps so the menu bar does not flash the track title.
     /// Looking up by position also handles backwards seeks without retaining stale UI state.
     public func displayLines(at position: TimeInterval) -> [LyricLine] {
