@@ -1,0 +1,27 @@
+name: Feature request
+description: Propose a focused improvement to an actual listening workflow.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: For early brainstorming, use Discussions Ideas. Search existing proposals first. English and Korean are welcome.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What workflow is difficult today?
+      description: Describe the concrete situation and who benefits.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the result you want, including how it should appear or behave.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and trade-offs
+      description: Mention existing workarounds and any expected permissions, network use, or resource cost.
