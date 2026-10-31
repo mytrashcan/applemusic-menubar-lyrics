@@ -6,10 +6,13 @@ A native macOS app that displays **Apple Music’s original lyrics** in the menu
 
 ## In action
 
-Actual captures from the running app on macOS. The menu bar image is cropped to
-the lyric item; native overflow was expanded for the capture.
+An eight-second recording of the running app: sung words brighten as playback
+advances, then the next lyric appears. The native overflow area was expanded;
+the recording is cropped to the lyric item.
 
-![Actual menu bar displaying the current Apple Music lyric](docs/images/menu-bar.png)
+![Actual playback with progressive word highlighting and lyric changes](docs/images/menu-bar.gif)
+
+[View a static screenshot](docs/images/menu-bar.png)
 
 <details>
 <summary>Status window and live word highlighting</summary>
