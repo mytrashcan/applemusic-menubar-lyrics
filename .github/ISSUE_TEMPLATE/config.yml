@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Setup and usage questions
+    url: https://github.com/mytrashcan/applemusic-menubar-lyrics/discussions/categories/q-a
+    about: Ask for help connecting Music, loading lyrics, or placing the menu bar item.
+  - name: Compatibility testing
+    url: https://github.com/mytrashcan/applemusic-menubar-lyrics/discussions/5
+    about: Share macOS, architecture, playback, and accessibility observations.
+  - name: Ideas and early proposals
+    url: https://github.com/mytrashcan/applemusic-menubar-lyrics/discussions/categories/ideas
+    about: Discuss a workflow before opening a scoped feature request.

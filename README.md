@@ -4,6 +4,25 @@ A native macOS app that displays **Apple Music’s original lyrics** in the menu
 
 **Status: early implementation with experimental cache integration.** The app reads local TTML lyrics and timing data already downloaded by Music. It does not use external lyrics services. Apple’s cache format is private and may change with macOS or Music updates.
 
+## In action
+
+An eight-second recording of the running app: sung words brighten as playback
+advances, then the next lyric appears. The native overflow area was expanded;
+the recording is cropped to the lyric item.
+
+![Actual playback with progressive word highlighting and lyric changes](docs/images/menu-bar.gif)
+
+[View a static screenshot](docs/images/menu-bar.png)
+
+<details>
+<summary>Status window and live word highlighting</summary>
+
+<img src="docs/images/status-window.png" width="620" alt="Actual status window showing bright sung text, dim upcoming text, and playback diagnostics">
+
+</details>
+
+[Screenshot details](docs/images/README.md) · [Latest release](https://github.com/mytrashcan/applemusic-menubar-lyrics/releases/latest) · [Ask a question](https://github.com/mytrashcan/applemusic-menubar-lyrics/discussions/categories/q-a)
+
 ## Getting started
 
 Building requires macOS 13 or later and Xcode or Command Line Tools with Swift 6 or later.
@@ -112,6 +131,23 @@ See the [local validation report](docs/VALIDATION.md) for observations and remai
 - Initial cache reads have taken tens of seconds in local observations. Playback polling continues independently while lyrics load.
 - After the first connection, subsequent launches connect in the background unless **Connect on Launch** is disabled. Launch at login and a notarized installer are not provided. The width preference is saved.
 - The Music cache is not a public API. App Store distribution has not been evaluated.
+
+## Community and contributing
+
+New here? [Introduce yourself and share your workflow](https://github.com/mytrashcan/applemusic-menubar-lyrics/discussions/4).
+You can help by [testing compatibility on your Mac](https://github.com/mytrashcan/applemusic-menubar-lyrics/discussions/5),
+[reporting a reproducible bug](https://github.com/mytrashcan/applemusic-menubar-lyrics/issues/new/choose),
+or improving documentation and synthetic regression tests.
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, validation, and PR guidance.
+[Good first issues](https://github.com/mytrashcan/applemusic-menubar-lyrics/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22)
+are small starting points. Use [Ideas](https://github.com/mytrashcan/applemusic-menubar-lyrics/discussions/categories/ideas)
+for early proposals and [Q&A](https://github.com/mytrashcan/applemusic-menubar-lyrics/discussions/categories/q-a)
+for setup help. English and Korean are welcome in community conversations; project
+documentation and PRs use English. Please follow the [community guidelines](CODE_OF_CONDUCT.md).
+
+Do not upload Music cache files, account data, complete lyrics, or listening-history
+exports. Cropped screenshots and the relevant status metrics are usually enough.
 
 ## References
 

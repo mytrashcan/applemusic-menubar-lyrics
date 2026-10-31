@@ -1,0 +1,56 @@
+name: Bug report
+description: Report a reproducible lyrics, playback, or menu bar problem.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues first. For setup help, use Discussions Q&A.
+        Do not attach Music cache databases, account data, full lyrics, or listening-history exports.
+        English and Korean reports are welcome.
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: macOS version/build, Mac architecture, and Music version.
+      placeholder: macOS 27.2 (26B123), Apple Silicon, Music version…
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: App release or commit
+      description: Include whether you built locally or downloaded a release.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include playback state, lyrics-panel state, and width setting when relevant.
+      placeholder: |
+        1. Connect to Music…
+        2. Play a track and open its lyrics…
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected-actual
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Relevant diagnostics or cropped screenshot
+      description: Show Status timing counts, query durations, and permission/cache messages can help. Remove private information.
+  - type: checkboxes
+    id: cache
+    attributes:
+      label: Checks already tried
+      options:
+        - label: Opened the current song's lyrics in Music once.
+        - label: Tried Reload Lyrics Cache and checked Music automation permission.
+        - label: Checked 200pt width and native overflow if the item is hidden.
