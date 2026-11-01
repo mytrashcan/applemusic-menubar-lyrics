@@ -29,6 +29,8 @@ struct Preferences {
     private enum Key {
         static let connectOnLaunch = "connectOnLaunch"
         static let lyricsWidth = "lyricsWidth"
+        static let shrinkWhenCrowded = "shrinkWhenCrowded"
+        static let floatingLyricsBar = "floatingLyricsBar"
     }
 
     private let defaults: UserDefaults
@@ -45,5 +47,17 @@ struct Preferences {
     var lyricsWidth: LyricsWidth {
         get { LyricsWidth(rawValue: defaults.double(forKey: Key.lyricsWidth)) ?? .default }
         nonmutating set { defaults.set(newValue.rawValue, forKey: Key.lyricsWidth) }
+    }
+
+    /// Step the menu bar item down to its icon when macOS pushes it out of the menu bar. On by default.
+    var shrinkWhenCrowded: Bool {
+        get { defaults.object(forKey: Key.shrinkWhenCrowded) as? Bool ?? true }
+        nonmutating set { defaults.set(newValue, forKey: Key.shrinkWhenCrowded) }
+    }
+
+    /// Draw lyrics in a click-through strip under the menu bar instead of the menu bar item.
+    var floatingLyricsBar: Bool {
+        get { defaults.bool(forKey: Key.floatingLyricsBar) }
+        nonmutating set { defaults.set(newValue, forKey: Key.floatingLyricsBar) }
     }
 }

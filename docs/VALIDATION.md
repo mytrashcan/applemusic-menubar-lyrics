@@ -56,3 +56,106 @@ is exposed as the accessibility value.
 This supports compact width plus user-controlled right-side placement as a
 practical mitigation on the tested layout. It does not establish an always-visible
 API or behavior under arbitrary icon counts, display changes, or fullscreen.
+
+# Crowded menu bar — 2026-11-01
+
+Environment: macOS 27.2 (26B123), 14-inch MacBook Pro with notch (1710 × 1107pt,
+menu bar region right of the notch starts at x = 947.5), Swift 6.4.2, Command Line
+Tools. Observations come from a stand-alone probe (`NSStatusItem` plus filler items)
+and from the app’s own `menubar-fit` and `floating-bar` log categories. No lyrics or
+track names are included.
+
+## How a clipped or overflowed status item reports itself
+
+| State | `item.isVisible` | `window.isVisible` | `occlusionState` | `window.frame` | `window.screen` |
+| --- | --- | --- | --- | --- | --- |
+| Visible, 22pt | true | true | contains `.visible` (8194) | (1240, 1073, 38, 34) | main |
+| Visible, 240pt | true | true | contains `.visible` | (1022, 1073, 256, 34) | main |
+| Pushed out by crowding, 600pt | true | true | no `.visible` (8192) | (654, 1073, 616, 34), left of the notch region | main |
+| Pushed out by crowding, 150pt filler | true | true | no `.visible` | (848, 1073, 166, 34) | main |
+| Never placed (no room at creation) | true | true | no `.visible` (8) | (0, -34, 166, 34) | nil |
+| Menu bar hidden by a full-screen app | true | true | no `.visible` | unchanged (1240, 1073, 38, 34) | main |
+
+- `isVisible` on the item and on its window never changes; neither is a signal.
+- `NSWindowDidChangeOcclusionStateNotification` fires on the item’s window when it
+  is pushed out or comes back, and `NSWindowDidMoveNotification` /
+  `NSWindowDidResizeNotification` fire when macOS relocates or resizes it. Launch
+  posts a burst of these within the first 100ms.
+- Entering full screen also posts `NSApplication.didChangeScreenParametersNotification`
+  and leaves `NSScreen.main.visibleFrame` at the same top edge; `NSMenu.menuBarVisible()`
+  only reflects this app, not the frontmost one.
+- macOS hides the newest (leftmost) items first and remembers each item’s slot by
+  autosave name, so an item that has been ⌘-dragged to the right keeps its slot
+  across launches even when newer items appear.
+
+The app therefore treats an item as clipped only when its window is occluded **and**
+its frame moved: no screen, or `minX` left of `auxiliaryTopRightArea.minX` on a
+notched display, or a changed right edge on displays without a notch. An occluded
+window whose frame did not move is a hidden menu bar and leaves the width alone.
+
+## Auto-shrink, observed in the app
+
+Preferred width 360pt. The item’s own slot on this Mac fits 240pt but not 360pt.
+
+```text
+18:03:59.846  clipped at 360pt (occluded true, x 894); now 240pt
+18:04:19.946  visible at 240pt (occluded false, x 1022); now 360pt
+18:04:20.321  clipped at 360pt (occluded true, x 894); now 240pt
+18:05:00.421  visible at 240pt; now 360pt      ← retry after 40 s
+18:05:00.804  clipped at 360pt; now 240pt
+18:06:20.904  visible at 240pt; now 360pt      ← retry after 80 s
+18:06:21.266  clipped at 360pt; now 240pt
+```
+
+With six 150pt filler items created first and a fresh autosave name, the item was
+never placed (x 0, no screen) and stepped down to the icon; removing the fillers
+brought it back one step per retry interval:
+
+```text
+18:10:11.834  clipped at 360pt (occluded true, x 0); now 240pt
+18:10:12.634  clipped at 240pt (occluded true, x 0); now 200pt
+18:10:13.461  clipped at 200pt (occluded true, x 0); now 22pt
+              (fillers removed at 18:10:23)
+18:10:43.988  visible at 22pt (occluded false, x 1240); now 200pt
+18:11:04.070  visible at 200pt (occluded false, x 1062); now 240pt
+18:11:24.146  visible at 240pt (occluded false, x 1022); now 360pt
+18:11:24.510  clipped at 360pt (occluded true, x 894); now 240pt
+```
+
+Each shrink step waited the 0.75 s settle interval; each grow waited the 20 s retry
+interval; a grow that was clipped within its 5 s probe window doubled the next wait.
+
+## Floating lyrics bar
+
+The strip lives inside the menu bar's left region: `auxiliaryTopLeftArea` is
+(0, 1073.5, 762.5, 33.5) on this display. It starts 12pt after the frontmost app's
+last menu title, read through the Accessibility API (`kAXMenuBarAttribute` →
+children → `kAXPositionAttribute` + `kAXSizeAttribute`, 250ms messaging timeout),
+and narrows to the room left before the notch; below 80pt it hides. Without
+Accessibility access it starts at the middle of the region or right-aligns the
+selected width, whichever is further right.
+
+Observed with the test build (Accessibility not granted to it, so the fallback
+placement applied): see the `floating-bar` log excerpt below. The menu bar item
+dropped to the icon while the bar was on.
+
+The strip hides while the menu bar is hidden. The signal is the status item's own
+window: occluded without a frame change (the full-screen row in the table above).
+The Window Server's `Menubar` window (layer 24, 1710 × 34) is listed by
+`CGWindowListCopyWindowInfo` without Screen Recording access, but a full-screen
+transition could not be forced from a background process in the second session,
+so whether it disappears during full screen was not observed; the status item
+signal is the one in use.
+
+## Not verified here
+
+- Music playback during these runs: Music automation was blocked by a pending
+  consent dialog on this machine, so the shrink and floating runs showed the
+  fallback label rather than timed lyrics. The rendering path is unchanged.
+- Clicking the icon (popover) and right-clicking it (menu) need a pointer; they
+  were not driven in this session.
+- Displays without a notch, external displays, and the floating bar over another
+  app’s full-screen Space.
+- Accessibility-measured menu titles: the test build was not granted Accessibility,
+  so only the fallback placement was observed. The measurement path is covered by
+  code review only.

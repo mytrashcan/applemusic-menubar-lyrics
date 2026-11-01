@@ -1,0 +1,180 @@
+import Foundation
+import Testing
+@testable import MusicLyricsBar
+
+struct StatusItemPlacementTests {
+    private let notchRegionMinX: CGFloat = 947.5
+    private let visibleFrame = CGRect(x: 1022, y: 1073, width: 256, height: 34)
+
+    @Test func visibleWindowIsNeverClipped() {
+        let placement = StatusItemPlacement(isOccluded: false, frame: visibleFrame, hasScreen: true,
+                                            visibleRegionMinX: notchRegionMinX, lastVisibleFrame: nil)
+        #expect(!placement.isClipped)
+    }
+
+    @Test func itemParkedWithoutAScreenIsClipped() {
+        // macOS parks an item it never placed at (0, -34) with no screen.
+        let placement = StatusItemPlacement(isOccluded: true, frame: CGRect(x: 0, y: -34, width: 166, height: 34),
+                                            hasScreen: false, visibleRegionMinX: nil, lastVisibleFrame: nil)
+        #expect(placement.isClipped)
+        #expect(StatusItemPlacement(isOccluded: true, frame: nil, hasScreen: false,
+                                    visibleRegionMinX: nil, lastVisibleFrame: nil).isClipped)
+    }
+
+    @Test func occludedItemLeftOfTheNotchRegionIsClipped() {
+        let pushedOut = StatusItemPlacement(isOccluded: true, frame: CGRect(x: 654, y: 1073, width: 616, height: 34),
+                                            hasScreen: true, visibleRegionMinX: notchRegionMinX, lastVisibleFrame: nil)
+        #expect(pushedOut.isClipped)
+        // A full-screen app hides the menu bar: occluded, but the frame stays in the visible region.
+        let menuBarHidden = StatusItemPlacement(isOccluded: true, frame: visibleFrame, hasScreen: true,
+                                                visibleRegionMinX: notchRegionMinX, lastVisibleFrame: visibleFrame)
+        #expect(!menuBarHidden.isClipped)
+    }
+
+    @Test func withoutANotchAMovedRightEdgeMeansClipped() {
+        let hiddenBar = StatusItemPlacement(isOccluded: true, frame: visibleFrame, hasScreen: true,
+                                            visibleRegionMinX: nil, lastVisibleFrame: visibleFrame)
+        #expect(!hiddenBar.isClipped)
+        // Our own resize keeps the right edge; a relocation by macOS does not.
+        let resized = StatusItemPlacement(isOccluded: true, frame: CGRect(x: 1240, y: 1073, width: 38, height: 34),
+                                          hasScreen: true, visibleRegionMinX: nil, lastVisibleFrame: visibleFrame)
+        #expect(!resized.isClipped)
+        let moved = StatusItemPlacement(isOccluded: true, frame: CGRect(x: 654, y: 1073, width: 616, height: 34),
+                                        hasScreen: true, visibleRegionMinX: nil, lastVisibleFrame: visibleFrame)
+        #expect(moved.isClipped)
+        // No reference frame yet: assume the worst so the item at least shows its icon.
+        let unknown = StatusItemPlacement(isOccluded: true, frame: visibleFrame, hasScreen: true,
+                                          visibleRegionMinX: nil, lastVisibleFrame: nil)
+        #expect(unknown.isClipped)
+    }
+}
+
+struct MenuBarFitPolicyTests {
+    private let settle = MenuBarFitPolicy.settleInterval
+    private let retry = MenuBarFitPolicy.initialRetryInterval
+
+    @Test func startsAtThePreferredWidthAndDoesNothingWhileVisible() {
+        var policy = MenuBarFitPolicy(preferred: .wide)
+        #expect(policy.length == LyricsWidth.wide.points)
+        #expect(!policy.isReduced)
+        #expect(policy.update(clipped: false, now: 0) == .init())
+        #expect(policy == MenuBarFitPolicy(preferred: .wide))
+    }
+
+    @Test func stepsDownThroughTheWidthsToTheIconAndStopsThere() {
+        var policy = MenuBarFitPolicy(preferred: .wide)
+        #expect(policy.update(clipped: true, now: 0) == .init(length: LyricsWidth.medium.points, checkAfter: settle))
+        #expect(policy.update(clipped: true, now: 1) == .init(length: LyricsWidth.narrow.points, checkAfter: settle))
+        #expect(policy.update(clipped: true, now: 2) == .init(length: LyricsWidth.compact.points, checkAfter: settle))
+        #expect(policy.update(clipped: true, now: 3) == .init(length: MenuBarFitPolicy.iconOnlyLength, checkAfter: settle))
+        #expect(policy.isIconOnly)
+        #expect(policy.level == .iconOnly)
+        // Nothing smaller to try: wait for the window to become visible again.
+        #expect(policy.update(clipped: true, now: 4) == .init())
+    }
+
+    @Test func compactPreferenceGoesStraightToTheIcon() {
+        var policy = MenuBarFitPolicy(preferred: .compact)
+        #expect(policy.update(clipped: true, now: 0).length == MenuBarFitPolicy.iconOnlyLength)
+        #expect(policy.level == .iconOnly)
+    }
+
+    @Test func growsBackOneStepAtATimeOnceTheRetryIsDue() {
+        var policy = MenuBarFitPolicy(preferred: .medium)
+        _ = policy.update(clipped: true, now: 0)
+        _ = policy.update(clipped: true, now: 1)
+        #expect(policy.level == .width(.compact))
+        // Visible again, but the retry scheduled at the last shrink is not due yet.
+        #expect(policy.update(clipped: false, now: 2) == .init(checkAfter: retry - 1))
+        #expect(policy.update(clipped: false, now: 1 + retry) == .init(length: LyricsWidth.narrow.points, checkAfter: settle))
+        #expect(policy.update(clipped: false, now: 1 + retry + settle) == .init(checkAfter: retry - settle))
+        #expect(policy.update(clipped: false, now: 1 + 2 * retry) == .init(length: LyricsWidth.medium.points, checkAfter: settle))
+        #expect(!policy.isReduced)
+        #expect(policy.update(clipped: false, now: 1 + 2 * retry + settle) == .init())
+    }
+
+    @Test func failedProbesBackOffExponentiallyUpToTheMaximum() {
+        var policy = MenuBarFitPolicy(preferred: .narrow)
+        _ = policy.update(clipped: true, now: 0)
+        var now = retry
+        var delays: [TimeInterval] = []
+        for _ in 0..<7 {
+            #expect(policy.update(clipped: false, now: now).length == LyricsWidth.narrow.points)
+            // Clipped right after growing: a failed probe.
+            let decision = policy.update(clipped: true, now: now + 0.5)
+            #expect(decision.length == LyricsWidth.compact.points)
+            guard case .some(let wait) = policy.update(clipped: false, now: now + 1).checkAfter else {
+                Issue.record("Expected a scheduled retry"); return
+            }
+            // The clip happened half a second after the grow; the wait reported at now + 1 is the
+            // new interval minus that half second.
+            delays.append(wait + 0.5)
+            now += wait + 1
+        }
+        #expect(delays == [40, 80, 160, 320, 600, 600, 600])
+    }
+
+    @Test func aSurvivingGrowResetsTheBackoff() {
+        var policy = MenuBarFitPolicy(preferred: .medium)
+        _ = policy.update(clipped: true, now: 0)
+        _ = policy.update(clipped: true, now: 1)
+        _ = policy.update(clipped: false, now: 1 + retry)          // grow to narrow
+        _ = policy.update(clipped: true, now: 2 + retry)           // fails: interval doubles to 40
+        let failedWait = policy.update(clipped: false, now: 3 + retry).checkAfter ?? 0
+        #expect(failedWait == 2 * retry - 1)
+        let secondGrow = 2 + retry + 2 * retry
+        #expect(policy.update(clipped: false, now: secondGrow).length == LyricsWidth.narrow.points)
+        // It survives the probe window this time, so the next step waits the initial interval again.
+        #expect(policy.update(clipped: false, now: secondGrow + 2 * retry).length == LyricsWidth.medium.points)
+        _ = policy.update(clipped: true, now: secondGrow + 2 * retry + 100)  // external hide, not a probe
+        #expect(policy.update(clipped: false, now: secondGrow + 2 * retry + 101).checkAfter == retry - 1)
+    }
+
+    @Test func screenChangeProbesSoonAndForgetsTheBackoff() {
+        var policy = MenuBarFitPolicy(preferred: .narrow)
+        #expect(policy.screenChanged(now: 0) == .init())
+        _ = policy.update(clipped: true, now: 0)
+        #expect(policy.screenChanged(now: 5) == .init(checkAfter: MenuBarFitPolicy.screenChangeDelay))
+        #expect(policy.update(clipped: false, now: 5 + MenuBarFitPolicy.screenChangeDelay).length == LyricsWidth.narrow.points)
+    }
+}
+
+struct FloatingPanelPlacementTests {
+    private let thickness: CGFloat = 22
+    /// `auxiliaryTopLeftArea` of the notched 14-inch display used for the measurements.
+    private let leftOfNotch = CGRect(x: 0, y: 1073.5, width: 762.5, height: 33.5)
+
+    private func placement(titles: CGFloat?, width: CGFloat = 200) -> FloatingLyricsPanel.Placement {
+        FloatingLyricsPanel.Placement(region: leftOfNotch, titlesRightEdge: titles, contentWidth: width, contentHeight: thickness)
+    }
+
+    @Test func startsAfterTheMenuTitlesInsideTheMenuBarStrip() {
+        let frame = placement(titles: 400).frame
+        #expect(frame == CGRect(x: 412, y: 1075, width: 208, height: 30))
+    }
+
+    @Test func narrowsToTheRoomLeftBeforeTheNotchAndHidesWhenTooNarrow() {
+        #expect(placement(titles: 600).frame?.width == 143)
+        #expect(placement(titles: 600).frame?.maxX == 755)
+        #expect(placement(titles: 700).frame == nil)
+        #expect(placement(titles: 400, width: 600).frame?.width == 343)
+    }
+
+    @Test func withoutMeasuredTitlesItRightAlignsButNeverStartsLeftOfTheMiddle() {
+        #expect(placement(titles: nil).frame == CGRect(x: 547, y: 1075, width: 208, height: 30))
+        let wide = placement(titles: nil, width: 600).frame
+        #expect(wide?.minX == 381)
+        #expect(wide?.maxX == 754)
+    }
+
+    @Test func regionWithoutANotchRunsFromTheLeftEdgeToTheStatusArea() {
+        let screen = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        let visible = CGRect(x: 0, y: 0, width: 1920, height: 1055)
+        let known = FloatingLyricsPanel.Placement.region(screenFrame: screen, visibleFrame: visible, leftArea: nil, statusAreaMinX: 1500)
+        #expect(known == CGRect(x: 0, y: 1055, width: 1500, height: 25))
+        // Menu bar hidden: visibleFrame reaches the top, so the assumed height is used.
+        let hidden = FloatingLyricsPanel.Placement.region(screenFrame: screen, visibleFrame: screen, leftArea: nil, statusAreaMinX: nil)
+        #expect(hidden == CGRect(x: 0, y: 1056, width: 960, height: 24))
+        #expect(FloatingLyricsPanel.Placement.region(screenFrame: screen, visibleFrame: visible, leftArea: leftOfNotch, statusAreaMinX: 1500) == leftOfNotch)
+    }
+}
