@@ -8,6 +8,7 @@ final class LyricPopover {
     private let popover = NSPopover()
     private let title = NSTextField(labelWithString: "Music Lyrics Bar")
     private let preview = NSImageView()
+    private let stack: NSStackView
     private let previewWidth: NSLayoutConstraint
 
     var isShown: Bool { popover.isShown }
@@ -21,7 +22,7 @@ final class LyricPopover {
         preview.imageAlignment = .alignLeft
         preview.contentTintColor = .labelColor
         preview.setAccessibilityIdentifier("popoverLyric")
-        let stack = NSStackView(views: [title, preview])
+        stack = NSStackView(views: [title, preview])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 6
@@ -36,7 +37,22 @@ final class LyricPopover {
         ])
         popover.contentViewController = controller
         popover.behavior = .transient
+        fitContent()
     }
+
+    /// A popover takes its size from `contentSize`, not from the stack's constraints; left at
+    /// zero it opens as an empty bubble.
+    private func fitContent() {
+        stack.layoutSubtreeIfNeeded()
+        let fitting = stack.fittingSize
+        // The stack's fitting width drops its trailing inset; the preview plus both insets is the floor.
+        let size = NSSize(width: max(fitting.width, previewWidth.constant + 2 * Self.padding), height: fitting.height)
+        stack.frame = NSRect(origin: .zero, size: size)
+        popover.contentSize = size
+    }
+
+    /// The popover's content size, for tests.
+    var contentSize: NSSize { popover.contentSize }
 
     func toggle(relativeTo view: NSView) {
         if popover.isShown {
@@ -53,6 +69,7 @@ final class LyricPopover {
 
     func setWidth(_ width: CGFloat) {
         previewWidth.constant = width
+        fitContent()
     }
 
     func update(title: String, image: NSImage?) {
