@@ -135,9 +135,42 @@ and narrows to the room left before the notch; below 80pt it hides. Without
 Accessibility access it starts at the middle of the region or right-aligns the
 selected width, whichever is further right.
 
-Observed with the test build (Accessibility not granted to it, so the fallback
-placement applied): see the `floating-bar` log excerpt below. The menu bar item
-dropped to the icon while the bar was on.
+Observed with Music playing (64 timed lines loaded) and Accessibility granted to
+the test build, switching between apps; each line is the app's own log:
+
+```text
+19:16:37.061  Menu titles of pid 1750: accessibility allowed, end at 460
+19:16:37.061  Floating lyrics bar placed at {{472, 1075}, {248, 30}} (titles end at 460, measured)
+19:16:38.035  Menu titles of pid 7473: accessibility allowed, end at 316
+19:16:38.036  Floating lyrics bar placed at {{328, 1075}, {248, 30}} (titles end at 316, measured)
+19:16:38.979  Menu titles of pid 53943: accessibility allowed, end at 459
+19:16:38.980  Floating lyrics bar placed at {{471, 1075}, {248, 30}} (titles end at 459, measured)
+```
+
+The strip starts 12pt after the last title, stays inside the region left of the
+notch (maxX 755), and follows the frontmost app within about a second of each
+activation. The same measurement run from a trusted probe read Finder 383pt,
+Safari 459pt and Ghostty 365pt. Music answered within 26ms once activated, but
+returned `kAXErrorCannotComplete` (-25204) while in the background, which the
+app treats as "unknown" and falls back on. Before access was granted the fallback
+placed the 360pt strip at `{{387, 1075}, {368, 30}}` and a 240pt strip at
+`{{507, 1075}, {248, 30}}`; app switches did not move it. The menu bar item
+dropped to the icon while the bar was on, and the app used about 1% CPU with
+Music playing.
+
+**Granting Accessibility to an ad-hoc signed build.** TCC stores the app's code
+requirement when the record is first created. An ad-hoc signature has no stable
+identity, so every rebuild changes the code hash and `AXIsProcessTrusted()`
+returns false again even though System Settings still shows the app enabled;
+tccd logs `matchesCodeRequirement ... status: -67050`. Toggling the entry or
+re-adding it keeps the old requirement. What worked:
+
+```sh
+tccutil reset Accessibility io.github.mytrashcan.MusicLyricsBar
+```
+
+then **Allow Accessibility for Floating Bar…** from the app's menu, which
+creates a record for the running build. No relaunch was needed afterwards.
 
 The strip hides while the menu bar is hidden. The signal is the status item's own
 window: occluded without a frame change (the full-screen row in the table above).
@@ -149,13 +182,13 @@ signal is the one in use.
 
 ## Not verified here
 
-- Music playback during these runs: Music automation was blocked by a pending
-  consent dialog on this machine, so the shrink and floating runs showed the
-  fallback label rather than timed lyrics. The rendering path is unchanged.
+- Music playback during the auto-shrink runs: Music automation was blocked by a
+  pending consent dialog at the time, so those runs showed the fallback label.
+  The floating bar was later observed with Music playing and lyrics loaded.
 - Clicking the icon (popover) and right-clicking it (menu) need a pointer; they
   were not driven in this session.
 - Displays without a notch, external displays, and the floating bar over another
   app’s full-screen Space.
-- Accessibility-measured menu titles: the test build was not granted Accessibility,
-  so only the fallback placement was observed. The measurement path is covered by
-  code review only.
+- Accessibility-measured menu titles were observed for three apps on one Mac;
+  apps whose menu bar does not answer within 250ms fall back and were not
+  enumerated.

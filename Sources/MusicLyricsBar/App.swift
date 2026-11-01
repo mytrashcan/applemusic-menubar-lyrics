@@ -547,6 +547,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func measureTitles() {
         if let frontmost = NSWorkspace.shared.frontmostApplication, frontmost != NSRunningApplication.current {
             titlesRightEdge = MenuBarTitles.titlesRightEdge(of: frontmost)
+            Self.logger.info("Menu titles of pid \(frontmost.processIdentifier, privacy: .public): accessibility \(MenuBarTitles.isTrusted ? "allowed" : "not allowed", privacy: .public), end at \(Int(self.titlesRightEdge ?? -1), privacy: .public)")
         }
         layoutFloatingPanel()
     }
