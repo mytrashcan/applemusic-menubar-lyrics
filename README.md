@@ -92,21 +92,12 @@ overflow area, **Shrink When Crowded** (on by default) steps the width down,
 current line in a popover; right-click for the menu. The item grows back one step
 at a time once space returns.
 
-**Want lyrics where there is room?** Turn on **Floating Lyrics Bar**. A click-through
-strip appears in the menu bar's left region, right after the frontmost app's menu
-titles and before the notch, on every Space. The menu bar item then shows only the
-♪ icon. The app asks once for Accessibility access so it can read where the menu
-titles end; without it the strip starts in the middle of that region and may cover
-a long menu.
-
 <details>
-<summary>More about shrinking, the floating bar, placement, and Reduce Motion</summary>
+<summary>More about shrinking, placement, and Reduce Motion</summary>
 
 Choose **Lyrics Width** in the menu or the width control in the status window: 200, 240, 360, or 600pt. The default is 200pt. The selected width stays fixed across lyric changes, and overflowing text scrolls instead of being replaced with an ellipsis. With the system’s Reduce Motion setting enabled, automatic ticker motion is disabled and the popover opens without animation. Full lyrics remain available in the tooltip, the popover, and the status window.
 
-The app uses a standard macOS status item, and there is no public API to pin it or give it priority. Instead, the app watches the item’s own window: macOS marks a crowded-out item as occluded and moves its frame left of the notch region (or parks it off screen), while a hidden menu bar, for example under a full-screen app, leaves the frame in place. Only the first case triggers a shrink. After a shrink the app waits 20 seconds, then tries one step up; a step that gets clipped again doubles the wait, up to 10 minutes, and a display change resets it. Turn **Shrink When Crowded** off to keep a fixed width.
-
-The floating bar is an `NSPanel` at status bar level that ignores clicks. It sits inside `auxiliaryTopLeftArea` on notched displays (the menu bar from the left edge to the status area elsewhere), starting 12pt after the last menu title of the frontmost app and narrowing to the room left before the notch; it hides when fewer than 80pt remain. The titles are read through the Accessibility API on each app activation and display change. The strip hides while the menu bar itself is hidden (a full-screen app, the auto-hide setting), detected by the status item's own window going occluded without moving, and it stops rendering while hidden or fully covered. It uses the same rendered image as the menu bar item. Width preferences and both switches persist across launches.
+The app uses a standard macOS status item, and there is no public API to pin it or give it priority. Instead, the app watches the item’s own window: macOS marks a crowded-out item as occluded and moves its frame left of the notch region (or parks it off screen), while a hidden menu bar, for example under a full-screen app, leaves the frame in place. Only the first case triggers a shrink. After a shrink the app waits 20 seconds, then tries one step up; a step that gets clipped again doubles the wait, up to 10 minutes, and a display change resets it. Turn **Shrink When Crowded** off to keep a fixed width. The width preference and the switch persist across launches.
 
 The native `<<` overflow button on macOS 27 can also expand hidden items into the left region, and **⌘-dragging** the item to the right of other items still helps: macOS hides the leftmost items first.
 
@@ -145,9 +136,8 @@ See [measured results and limitations](docs/PERFORMANCE.md) for playback, pause,
 
 The app reads the current track and playback position through Music automation,
 then opens the local lyrics cache **read-only**. It does not read account tokens,
-request headers, or the Music library database. Screen Recording permission is
-never required. Accessibility permission is optional: only the floating lyrics bar
-asks for it, and only to read where the frontmost app's menu titles end.
+request headers, or the Music library database. Accessibility and Screen Recording
+permissions are not required.
 
 <details>
 <summary>Data flow, cache paths, and architecture</summary>
@@ -167,7 +157,7 @@ Cache locations:
 ~/Library/Caches/com.apple.Music/fsCachedData/
 ```
 
-The app makes no network requests. It opens the cache database read-only and does not read account tokens, request headers, or the Music library database. It does not save or transmit lyrics or listening history. Screen Recording permission is never required. Accessibility permission is optional and only used by the floating lyrics bar to read the position and size of the frontmost app's menu titles; nothing else is read through it.
+The app makes no network requests. It opens the cache database read-only and does not read account tokens, request headers, or the Music library database. It does not save or transmit lyrics or listening history. Accessibility and Screen Recording permissions are not required.
 
 `LyricsCore` contains lyric models, the Apple TTML parser, the playback clock, and SQLite cache access. `MusicLyricsBar` performs Apple Events and cache reads in serial actors and updates the AppKit UI on the main thread. There are no third-party package dependencies.
 
@@ -178,7 +168,7 @@ The app makes no network requests. It opens the cache database read-only and doe
 - Open lyrics in Music first: this app uses already cached lyrics and does not fetch them from an API.
 - Word shading depends on the timing data available for that recording.
 - Initial cache access can be slow; playback polling continues independently.
-- A crowded menu bar shrinks the item to its icon; use the popover or the floating bar for the text.
+- A crowded menu bar shrinks the item to its icon; click the icon for the current line.
 - Launch at login, translation, pronunciation, and a notarized installer are not provided.
 
 <details>
