@@ -141,39 +141,40 @@ struct MenuBarFitPolicyTests {
 
 struct FloatingPanelPlacementTests {
     private let thickness: CGFloat = 22
+    /// `auxiliaryTopLeftArea` of the notched 14-inch display used for the measurements.
+    private let leftOfNotch = CGRect(x: 0, y: 1073.5, width: 762.5, height: 33.5)
 
-    @Test func centersUnderTheNotchJustBelowTheMenuBar() {
-        let placement = FloatingLyricsPanel.Placement(
-            screenFrame: CGRect(x: 0, y: 0, width: 1710, height: 1107),
-            visibleFrame: CGRect(x: 0, y: 84, width: 1710, height: 989),
-            safeAreaTop: 33.5, notch: 762.5...947.5, contentWidth: 200, contentHeight: thickness)
-        let frame = placement.frame
-        #expect(frame.size == CGSize(width: 208, height: 30))
-        #expect(frame.midX == 855)
-        #expect(frame.maxY == (1107 - 33.5 - 6).rounded())
+    private func placement(titles: CGFloat?, width: CGFloat = 200) -> FloatingLyricsPanel.Placement {
+        FloatingLyricsPanel.Placement(region: leftOfNotch, titlesRightEdge: titles, contentWidth: width, contentHeight: thickness)
     }
 
-    @Test func sitsAtTheRightEdgeWithoutANotchEvenWhileTheMenuBarIsHidden() {
+    @Test func startsAfterTheMenuTitlesInsideTheMenuBarStrip() {
+        let frame = placement(titles: 400).frame
+        #expect(frame == CGRect(x: 412, y: 1075, width: 208, height: 30))
+    }
+
+    @Test func narrowsToTheRoomLeftBeforeTheNotchAndHidesWhenTooNarrow() {
+        #expect(placement(titles: 600).frame?.width == 143)
+        #expect(placement(titles: 600).frame?.maxX == 755)
+        #expect(placement(titles: 700).frame == nil)
+        #expect(placement(titles: 400, width: 600).frame?.width == 343)
+    }
+
+    @Test func withoutMeasuredTitlesItRightAlignsButNeverStartsLeftOfTheMiddle() {
+        #expect(placement(titles: nil).frame == CGRect(x: 547, y: 1075, width: 208, height: 30))
+        let wide = placement(titles: nil, width: 600).frame
+        #expect(wide?.minX == 381)
+        #expect(wide?.maxX == 754)
+    }
+
+    @Test func regionWithoutANotchRunsFromTheLeftEdgeToTheStatusArea() {
         let screen = CGRect(x: 0, y: 0, width: 1920, height: 1080)
-        let shown = FloatingLyricsPanel.Placement(screenFrame: screen, visibleFrame: CGRect(x: 0, y: 0, width: 1920, height: 1055),
-                                                  safeAreaTop: 0, notch: nil, contentWidth: 360, contentHeight: thickness)
-        let margin: CGFloat = 8
-        #expect(shown.frame.maxX == 1920 - margin)
-        #expect(shown.frame.maxY == 1080 - 25 - 6 as CGFloat)
-        let hidden = FloatingLyricsPanel.Placement(screenFrame: screen, visibleFrame: screen,
-                                                   safeAreaTop: 0, notch: nil, contentWidth: 360, contentHeight: thickness)
-        #expect(hidden.frame.maxY == 1080 - 24 - 6 as CGFloat)
-    }
-
-    @Test func staysOnScreenWhenWiderThanTheSpaceAroundTheNotch() {
-        let placement = FloatingLyricsPanel.Placement(
-            screenFrame: CGRect(x: 0, y: 0, width: 1000, height: 700), visibleFrame: CGRect(x: 0, y: 0, width: 1000, height: 660),
-            safeAreaTop: 33.5, notch: 100...200, contentWidth: 600, contentHeight: thickness)
-        #expect(placement.frame.minX == 8)
-        let huge = FloatingLyricsPanel.Placement(
-            screenFrame: CGRect(x: 0, y: 0, width: 500, height: 700), visibleFrame: CGRect(x: 0, y: 0, width: 500, height: 660),
-            safeAreaTop: 0, notch: nil, contentWidth: 600, contentHeight: thickness)
-        #expect(huge.frame.width == 500 - 16 as CGFloat)
-        #expect(huge.frame.minX == 8)
+        let visible = CGRect(x: 0, y: 0, width: 1920, height: 1055)
+        let known = FloatingLyricsPanel.Placement.region(screenFrame: screen, visibleFrame: visible, leftArea: nil, statusAreaMinX: 1500)
+        #expect(known == CGRect(x: 0, y: 1055, width: 1500, height: 25))
+        // Menu bar hidden: visibleFrame reaches the top, so the assumed height is used.
+        let hidden = FloatingLyricsPanel.Placement.region(screenFrame: screen, visibleFrame: screen, leftArea: nil, statusAreaMinX: nil)
+        #expect(hidden == CGRect(x: 0, y: 1056, width: 960, height: 24))
+        #expect(FloatingLyricsPanel.Placement.region(screenFrame: screen, visibleFrame: visible, leftArea: leftOfNotch, statusAreaMinX: 1500) == leftOfNotch)
     }
 }

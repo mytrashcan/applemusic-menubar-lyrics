@@ -23,6 +23,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Renders the preferred width for the popover, the floating bar, and the status preview
     /// while the menu bar item itself is reduced to its icon.
     private let detailRenderer = StatusImageRenderer()
+    /// Renders the floating bar, whose width follows the room left after the menu titles.
+    private let floatingRenderer = StatusImageRenderer()
     private static let iconImage = NSImage(systemSymbolName: "music.note", accessibilityDescription: "Music Lyrics Bar")
     private let menu = NSMenu()
     private var item: NSStatusItem?
@@ -30,7 +32,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var popover: LyricPopover?
     private var floatingPanel: FloatingLyricsPanel?
     private var detailImage: NSImage?
+    private var floatingImage: NSImage?
     private var isShowingIconMenu = false
+    private var titlesTimer: Timer?
+    /// Last measured right edge of the frontmost app's menu titles, kept while our own app is frontmost.
+    private var titlesRightEdge: CGFloat?
     private var statusWindow: StatusWindow?
     private lazy var displayWidth = preferences.lyricsWidth
 
@@ -81,7 +87,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.item = item
         let fit = StatusItemFitObserver(item: item, preferred: displayWidth)
         fit.isEnabled = preferences.shrinkWhenCrowded && !preferences.floatingLyricsBar
-        fit.onChange = { [weak self] in self?.applyItemMode() }
+        fit.onChange = { [weak self] in
+            self?.applyItemMode()
+            self?.updateFloatingSuppression()
+        }
         self.fit = fit
         applyItemMode()
         observePlaybackChanges()
@@ -101,6 +110,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         displayTimer?.invalidate()
         fit?.invalidate()
         fit = nil
+        titlesTimer?.invalidate()
         hideFloatingPanel()
         for observer in workspaceObservers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
@@ -128,13 +138,17 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
             })
         }
+        workspaceObservers.append(workspace.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
+                                                        object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.scheduleTitlesMeasurement() }
+        })
         observers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.applyItemMode()
-                self.floatingPanel?.layout(on: self.itemScreen)
+                self.scheduleTitlesMeasurement()
             }
         })
     }
@@ -193,6 +207,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         floating.target = self
         floating.state = preferences.floatingLyricsBar ? .on : .off
         menu.addItem(floating)
+        if preferences.floatingLyricsBar, !MenuBarTitles.isTrusted {
+            addAction("Allow Accessibility for Floating Bar…", action: #selector(requestAccessibility), to: menu)
+        }
         addAction("Reload Lyrics Cache", action: #selector(reloadLyrics), to: menu)
         addAction("Open Music", action: #selector(openMusic), to: menu)
         menu.addItem(.separator())
@@ -244,8 +261,18 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleFloatingLyricsBar() {
         preferences.floatingLyricsBar.toggle()
         updateFitEnabled()
-        if preferences.floatingLyricsBar { showFloatingPanel() } else { hideFloatingPanel() }
+        if preferences.floatingLyricsBar {
+            // Accessibility is optional and only needed here: it tells where the menu titles end.
+            if !MenuBarTitles.isTrusted { MenuBarTitles.promptForAccess() }
+            showFloatingPanel()
+        } else {
+            hideFloatingPanel()
+        }
         applyItemMode()
+    }
+
+    @objc private func requestAccessibility() {
+        MenuBarTitles.promptForAccess()
     }
 
     @objc private func iconClicked() {
@@ -287,6 +314,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         fit?.setPreferred(width)
         popover?.setWidth(width.points)
         if preferences.floatingLyricsBar { showFloatingPanel() }
+        floatingRenderer.invalidate()
         statusWindow?.setWidth(width)
         displayedTitle = ""
         applyItemMode()
@@ -472,12 +500,55 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             panel.onVisibilityChange = { [weak self] in self?.render() }
             floatingPanel = panel
         }
-        floatingPanel?.show(on: itemScreen, width: displayWidth.points)
+        floatingPanel?.enable(width: displayWidth.points)
+        updateFloatingSuppression()
+        layoutFloatingPanel()
+        scheduleTitlesMeasurement()
     }
 
     private func hideFloatingPanel() {
+        titlesTimer?.invalidate()
+        titlesTimer = nil
         floatingPanel?.invalidate()
         floatingPanel = nil
+    }
+
+    private func updateFloatingSuppression() {
+        floatingPanel?.setSuppressed(fit?.isMenuBarHidden ?? false)
+    }
+
+    private func layoutFloatingPanel() {
+        guard let floatingPanel else { return }
+        // On displays without a notch the status area starts at our own (icon-only) item at best.
+        let statusAreaMinX = fit?.isMenuBarHidden == false ? item?.button?.window?.frame.minX : nil
+        floatingPanel.layout(on: itemScreen, statusAreaMinX: statusAreaMinX, titlesRightEdge: titlesRightEdge)
+    }
+
+    /// Menus can still be filling in right after an app activates, so measure twice.
+    private func scheduleTitlesMeasurement() {
+        guard floatingPanel != nil else { return }
+        scheduleTitlesMeasurement(after: 0.3, thenAfter: 1.2)
+    }
+
+    private func scheduleTitlesMeasurement(after delay: TimeInterval, thenAfter next: TimeInterval?) {
+        titlesTimer?.invalidate()
+        let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.measureTitles()
+                if let next { self.scheduleTitlesMeasurement(after: next, thenAfter: nil) }
+            }
+        }
+        timer.tolerance = 0.1
+        RunLoop.main.add(timer, forMode: .common)
+        titlesTimer = timer
+    }
+
+    private func measureTitles() {
+        if let frontmost = NSWorkspace.shared.frontmostApplication, frontmost != NSRunningApplication.current {
+            titlesRightEdge = MenuBarTitles.titlesRightEdge(of: frontmost)
+        }
+        layoutFloatingPanel()
     }
 
     // MARK: Display
@@ -518,14 +589,18 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             button?.image = Self.iconImage
         }
         // The preferred-width image is only drawn while something on screen shows it.
-        let wantsDetail = popover?.isShown == true || floatingPanel?.wantsUpdates == true ||
-            (!showsLyricsInItem && statusWindow?.window?.isVisible == true)
+        let wantsDetail = popover?.isShown == true || (!showsLyricsInItem && statusWindow?.window?.isVisible == true)
         if wantsDetail, let image = detailRenderer.image(lines: lines, fallback: label, position: position, isPlaying: isPlaying,
                                                          size: NSSize(width: displayWidth.points, height: thickness)) {
             detailImage = image
         }
         popover?.update(title: trackTitle, image: detailImage)
-        floatingPanel?.update(image: detailImage)
+        if let floatingPanel, floatingPanel.wantsUpdates,
+           let image = floatingRenderer.image(lines: lines, fallback: label, position: position, isPlaying: isPlaying,
+                                              size: NSSize(width: floatingPanel.contentWidth, height: thickness)) {
+            floatingImage = image
+        }
+        floatingPanel?.update(image: floatingImage)
         statusWindow?.updatePreview(image: showsLyricsInItem ? button?.image : detailImage)
         if isPlaying {
             var delay = lyrics?.nextLineBoundary(after: position).map { $0 - position } ?? .infinity
@@ -534,6 +609,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             if wantsDetail {
                 delay = min(delay, detailRenderer.nextUpdateDelay(at: position, isPlaying: true, width: displayWidth.points) ?? .infinity)
+            }
+            if let floatingPanel, floatingPanel.wantsUpdates {
+                delay = min(delay, floatingRenderer.nextUpdateDelay(at: position, isPlaying: true, width: floatingPanel.contentWidth) ?? .infinity)
             }
             if delay.isFinite {
                 let timer = Timer(timeInterval: max(0.01, delay), repeats: false) { [weak self] _ in

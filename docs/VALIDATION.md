@@ -125,11 +125,27 @@ brought it back one step per retry interval:
 Each shrink step waited the 0.75 s settle interval; each grow waited the 20 s retry
 interval; a grow that was clipped within its 5 s probe window doubled the next wait.
 
-## Floating lyrics bar, observed in the app
+## Floating lyrics bar
 
-With **Floating Lyrics Bar** on and a 360pt width, the panel appeared at
-`{{671, 1038}, {368, 30}}`: horizontally centered on the notch (centre x = 855),
-its top edge 6pt below the menu bar, and the menu bar item dropped to the icon.
+The strip lives inside the menu bar's left region: `auxiliaryTopLeftArea` is
+(0, 1073.5, 762.5, 33.5) on this display. It starts 12pt after the frontmost app's
+last menu title, read through the Accessibility API (`kAXMenuBarAttribute` →
+children → `kAXPositionAttribute` + `kAXSizeAttribute`, 250ms messaging timeout),
+and narrows to the room left before the notch; below 80pt it hides. Without
+Accessibility access it starts at the middle of the region or right-aligns the
+selected width, whichever is further right.
+
+Observed with the test build (Accessibility not granted to it, so the fallback
+placement applied): see the `floating-bar` log excerpt below. The menu bar item
+dropped to the icon while the bar was on.
+
+The strip hides while the menu bar is hidden. The signal is the status item's own
+window: occluded without a frame change (the full-screen row in the table above).
+The Window Server's `Menubar` window (layer 24, 1710 × 34) is listed by
+`CGWindowListCopyWindowInfo` without Screen Recording access, but a full-screen
+transition could not be forced from a background process in the second session,
+so whether it disappears during full screen was not observed; the status item
+signal is the one in use.
 
 ## Not verified here
 
@@ -140,3 +156,6 @@ its top edge 6pt below the menu bar, and the menu bar item dropped to the icon.
   were not driven in this session.
 - Displays without a notch, external displays, and the floating bar over another
   app’s full-screen Space.
+- Accessibility-measured menu titles: the test build was not granted Accessibility,
+  so only the fallback placement was observed. The measurement path is covered by
+  code review only.

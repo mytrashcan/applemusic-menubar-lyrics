@@ -146,17 +146,23 @@ final class StatusItemFitObserver {
     private var checkTimer: Timer?
     private var lastVisibleFrame: CGRect?
     private var lastLength: CGFloat?
-    /// Called on the main actor whenever the policy picks a different length.
+    /// Called on the main actor whenever the policy picks a different length or the menu bar
+    /// is hidden or shown.
     var onChange: (() -> Void)?
 
     /// Off while a mode that does not need the width (the floating bar) is active or the user
-    /// turned the feature off; the policy then stays at the preferred width.
+    /// turned the feature off; the policy then stays at the preferred width. The window is
+    /// still watched so `isMenuBarHidden` stays current.
     var isEnabled = true {
         didSet {
             guard isEnabled != oldValue else { return }
             if isEnabled { scheduleCheck(after: Self.debounceInterval) } else { reset() }
         }
     }
+
+    /// The item's window is occluded but was not moved: the menu bar itself is hidden, as
+    /// under a full-screen app or with the auto-hide setting.
+    private(set) var isMenuBarHidden = false
 
     var length: CGFloat { policy.length }
     var isIconOnly: Bool { policy.isIconOnly }
@@ -222,9 +228,15 @@ final class StatusItemFitObserver {
     func evaluate() {
         checkTimer?.invalidate()
         checkTimer = nil
-        guard isEnabled else { return }
         let placement = placement()
         if !placement.isOccluded, let frame = placement.frame { lastVisibleFrame = frame }
+        let menuBarHidden = placement.isOccluded && !placement.isClipped
+        if menuBarHidden != isMenuBarHidden {
+            isMenuBarHidden = menuBarHidden
+            Self.logger.info("Menu bar \(menuBarHidden ? "hidden" : "shown", privacy: .public) (status item window x \(Int(placement.frame?.minX ?? -1), privacy: .public))")
+            onChange?()
+        }
+        guard isEnabled else { return }
         let before = policy.length
         let decision = policy.update(clipped: placement.isClipped, now: uptime)
         if decision.length != nil, policy.length != before {
@@ -251,7 +263,7 @@ final class StatusItemFitObserver {
         onChange?()
     }
 
-    private func scheduleCheck(after delay: TimeInterval) {
+    func scheduleCheck(after delay: TimeInterval) {
         checkTimer?.invalidate()
         let timer = Timer(timeInterval: max(0.05, delay), repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.evaluate() }
