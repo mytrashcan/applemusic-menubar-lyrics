@@ -20,7 +20,17 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let cache = CacheReader()
     private let preferences = Preferences()
     private let statusImageRenderer = StatusImageRenderer()
+    /// Renders the preferred width for the popover, the floating bar, and the status preview
+    /// while the menu bar item itself is reduced to its icon.
+    private let detailRenderer = StatusImageRenderer()
+    private static let iconImage = NSImage(systemSymbolName: "music.note", accessibilityDescription: "Music Lyrics Bar")
+    private let menu = NSMenu()
     private var item: NSStatusItem?
+    private var fit: StatusItemFitObserver?
+    private var popover: LyricPopover?
+    private var floatingPanel: FloatingLyricsPanel?
+    private var detailImage: NSImage?
+    private var isShowingIconMenu = false
     private var statusWindow: StatusWindow?
     private lazy var displayWidth = preferences.lyricsWidth
 
@@ -66,12 +76,16 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             button.setAccessibilityIdentifier("MusicLyricsBar.Lyrics")
             button.setAccessibilityLabel("Music Lyrics Bar")
         }
-        let menu = NSMenu()
         menu.delegate = self
         item.menu = menu
         self.item = item
-        updateItemWidth()
+        let fit = StatusItemFitObserver(item: item, preferred: displayWidth)
+        fit.isEnabled = preferences.shrinkWhenCrowded && !preferences.floatingLyricsBar
+        fit.onChange = { [weak self] in self?.applyItemMode() }
+        self.fit = fit
+        applyItemMode()
         observePlaybackChanges()
+        if preferences.floatingLyricsBar { showFloatingPanel() }
         render()
         if preferences.connectOnLaunch { connect() } else { showStatus() }
     }
@@ -85,6 +99,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         cancelPolling()
         cancelLyricsLookup()
         displayTimer?.invalidate()
+        fit?.invalidate()
+        fit = nil
+        hideFloatingPanel()
         for observer in workspaceObservers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
         for observer in distributedObservers { DistributedNotificationCenter.default().removeObserver(observer) }
@@ -114,7 +131,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         observers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.updateItemWidth(); self?.render() }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.applyItemMode()
+                self.floatingPanel?.layout(on: self.itemScreen)
+            }
         })
     }
 
@@ -122,8 +143,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         menu.removeAllItems()
-        add(sample.map { "\($0.track.title) — \($0.track.artist)" } ?? "Music Lyrics Bar", to: menu)
+        add(trackTitle, to: menu)
         add(message, to: menu)
+        if let fit, fit.isReduced, !preferences.floatingLyricsBar {
+            add(fit.isIconOnly ? "Menu bar crowded · click the note for lyrics"
+                               : "Menu bar crowded · showing \(Int(fit.length))pt", to: menu)
+        }
         menu.addItem(.separator())
         if !currentText.isEmpty {
             add(currentText, to: menu)
@@ -160,11 +185,25 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         widthItem.submenu = widths
         menu.addItem(widthItem)
+        let shrink = NSMenuItem(title: "Shrink When Crowded", action: #selector(toggleShrinkWhenCrowded), keyEquivalent: "")
+        shrink.target = self
+        shrink.state = preferences.shrinkWhenCrowded ? .on : .off
+        menu.addItem(shrink)
+        let floating = NSMenuItem(title: "Floating Lyrics Bar", action: #selector(toggleFloatingLyricsBar), keyEquivalent: "")
+        floating.target = self
+        floating.state = preferences.floatingLyricsBar ? .on : .off
+        menu.addItem(floating)
         addAction("Reload Lyrics Cache", action: #selector(reloadLyrics), to: menu)
         addAction("Open Music", action: #selector(openMusic), to: menu)
         menu.addItem(.separator())
         add("Lyrics source: Apple Music cache on this Mac", to: menu)
         addAction("Quit", action: #selector(quit), to: menu, key: "q")
+    }
+
+    /// Icon-only mode owns the clicks: the left button opens the lyric popover, the right
+    /// button (or Control-click) the menu. Otherwise the status item shows the menu itself.
+    func menuDidClose(_ menu: NSMenu) {
+        if !showsLyricsInItem { item?.menu = nil }
     }
 
     private func add(_ title: String, to menu: NSMenu) {
@@ -197,6 +236,35 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         preferences.connectOnLaunch.toggle()
     }
 
+    @objc private func toggleShrinkWhenCrowded() {
+        preferences.shrinkWhenCrowded.toggle()
+        updateFitEnabled()
+    }
+
+    @objc private func toggleFloatingLyricsBar() {
+        preferences.floatingLyricsBar.toggle()
+        updateFitEnabled()
+        if preferences.floatingLyricsBar { showFloatingPanel() } else { hideFloatingPanel() }
+        applyItemMode()
+    }
+
+    @objc private func iconClicked() {
+        guard let item, let button = item.button else { return }
+        let event = NSApp.currentEvent
+        if event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true {
+            guard !isShowingIconMenu else { return }
+            isShowingIconMenu = true
+            defer { isShowingIconMenu = false }
+            item.menu = menu
+            button.performClick(nil)
+            item.menu = nil
+            return
+        }
+        if popover == nil { popover = LyricPopover(width: displayWidth.points) }
+        popover?.toggle(relativeTo: button)
+        render()
+    }
+
     @objc private func reloadLyrics() {
         cancelLyricsLookup()
         lyrics = nil
@@ -216,10 +284,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let points = sender.representedObject as? Double, let width = LyricsWidth(rawValue: points) else { return }
         displayWidth = width
         preferences.lyricsWidth = width
-        updateItemWidth()
+        fit?.setPreferred(width)
+        popover?.setWidth(width.points)
+        if preferences.floatingLyricsBar { showFloatingPanel() }
         statusWindow?.setWidth(width)
         displayedTitle = ""
-        render()
+        applyItemMode()
     }
 
     @objc private func changeWidthControl(_ sender: NSPopUpButton) {
@@ -355,13 +425,62 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         rescan.reset()
     }
 
-    // MARK: Display
+    // MARK: Menu bar fit and floating bar
 
-    private func updateItemWidth() {
-        guard let item else { return }
-        let screenWidth = (item.button?.window?.screen ?? NSScreen.main)?.frame.width ?? 1000
-        item.length = min(displayWidth.points, screenWidth * 0.45)
+    private var itemScreen: NSScreen? { item?.button?.window?.screen ?? NSScreen.main }
+
+    private var trackTitle: String {
+        sample.map { "\($0.track.title) — \($0.track.artist)" } ?? "Music Lyrics Bar"
     }
+
+    /// Lyrics draw in the menu bar item unless it is reduced to its icon or the floating bar took over.
+    private var showsLyricsInItem: Bool {
+        !preferences.floatingLyricsBar && !(fit?.isIconOnly ?? false)
+    }
+
+    private func updateFitEnabled() {
+        fit?.isEnabled = preferences.shrinkWhenCrowded && !preferences.floatingLyricsBar
+    }
+
+    /// Applies the width the fit policy (or the floating bar) chose and switches the item
+    /// between showing its menu directly and icon-only click handling.
+    private func applyItemMode() {
+        guard let item, let button = item.button else { return }
+        let length = preferences.floatingLyricsBar ? MenuBarFitPolicy.iconOnlyLength : (fit?.length ?? displayWidth.points)
+        let screenWidth = itemScreen?.frame.width ?? 1000
+        let capped = min(length, screenWidth * 0.45)
+        if item.length != capped { item.length = capped }
+        if showsLyricsInItem {
+            popover?.close()
+            button.target = nil
+            button.action = nil
+            if item.menu == nil { item.menu = menu }
+            // Coming back from the bare icon: the renderer may believe its last image is current.
+            if button.image === Self.iconImage { statusImageRenderer.invalidate() }
+        } else {
+            item.menu = nil
+            button.target = self
+            button.action = #selector(iconClicked)
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        }
+        render()
+    }
+
+    private func showFloatingPanel() {
+        if floatingPanel == nil {
+            let panel = FloatingLyricsPanel(width: displayWidth.points)
+            panel.onVisibilityChange = { [weak self] in self?.render() }
+            floatingPanel = panel
+        }
+        floatingPanel?.show(on: itemScreen, width: displayWidth.points)
+    }
+
+    private func hideFloatingPanel() {
+        floatingPanel?.invalidate()
+        floatingPanel = nil
+    }
+
+    // MARK: Display
 
     private func render() {
         autoreleasepool { renderFrame() }
@@ -387,16 +506,35 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             button?.setAccessibilityValue(label)
         }
         let tooltip = currentText.isEmpty ? message : currentText
-        if let image = statusImageRenderer.image(lines: lines, fallback: label, position: position,
-                                                 isPlaying: sample?.isPlaying ?? false,
-                                                 size: NSSize(width: item.length, height: NSStatusBar.system.thickness)) {
-            button?.image = image
+        let isPlaying = sample?.isPlaying ?? false
+        let thickness = NSStatusBar.system.thickness
+        let showsLyricsInItem = showsLyricsInItem
+        if showsLyricsInItem {
+            if let image = statusImageRenderer.image(lines: lines, fallback: label, position: position, isPlaying: isPlaying,
+                                                     size: NSSize(width: item.length, height: thickness)) {
+                button?.image = image
+            }
+        } else if button?.image !== Self.iconImage {
+            button?.image = Self.iconImage
         }
-        statusWindow?.updatePreview(image: button?.image)
-        if sample?.isPlaying == true {
-            let delay = min(lyrics?.nextLineBoundary(after: position).map { $0 - position } ?? .infinity,
-                            statusImageRenderer.nextUpdateDelay(at: position, isPlaying: true,
-                                                               width: item.length) ?? .infinity)
+        // The preferred-width image is only drawn while something on screen shows it.
+        let wantsDetail = popover?.isShown == true || floatingPanel?.wantsUpdates == true ||
+            (!showsLyricsInItem && statusWindow?.window?.isVisible == true)
+        if wantsDetail, let image = detailRenderer.image(lines: lines, fallback: label, position: position, isPlaying: isPlaying,
+                                                         size: NSSize(width: displayWidth.points, height: thickness)) {
+            detailImage = image
+        }
+        popover?.update(title: trackTitle, image: detailImage)
+        floatingPanel?.update(image: detailImage)
+        statusWindow?.updatePreview(image: showsLyricsInItem ? button?.image : detailImage)
+        if isPlaying {
+            var delay = lyrics?.nextLineBoundary(after: position).map { $0 - position } ?? .infinity
+            if showsLyricsInItem {
+                delay = min(delay, statusImageRenderer.nextUpdateDelay(at: position, isPlaying: true, width: item.length) ?? .infinity)
+            }
+            if wantsDetail {
+                delay = min(delay, detailRenderer.nextUpdateDelay(at: position, isPlaying: true, width: displayWidth.points) ?? .infinity)
+            }
             if delay.isFinite {
                 let timer = Timer(timeInterval: max(0.01, delay), repeats: false) { [weak self] _ in
                     MainActor.assumeIsolated { self?.render() }
@@ -415,7 +553,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         lastStatusUpdate = now
         let playback = sample.map { $0.isPlaying ? "Playing" : "Paused" } ?? "Waiting"
         statusWindow.update(
-            track: sample.map { "\($0.track.title) — \($0.track.artist)" } ?? "Music Lyrics Bar",
+            track: trackTitle,
             lyric: currentText.isEmpty ? label : currentText,
             status: message,
             metrics: String(format: "%@ · Position %.2fs · Polls %d · Events %d\nPlayback %.1fms · Cache %.1fms · Lines %d · Timed spans %d",

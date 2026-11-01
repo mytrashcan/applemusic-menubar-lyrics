@@ -51,6 +51,12 @@ final class StatusImageRenderer {
         return next.isFinite ? next : nil
     }
 
+    /// Forces the next `image` call to return an image even when nothing changed, for a caller
+    /// that showed something else meanwhile.
+    func invalidate() {
+        lastSize = .zero
+    }
+
     /// Returns a new image when the visible pixels changed, or nil when the previous image is
     /// still correct and the caller should keep showing it.
     func image(lines: [LyricLine], fallback: String, position: Double, isPlaying: Bool, size: NSSize) -> NSImage? {
