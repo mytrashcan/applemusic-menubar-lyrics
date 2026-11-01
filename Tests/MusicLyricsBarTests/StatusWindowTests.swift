@@ -12,7 +12,7 @@ struct StatusWindowTests {
             let target = NSObject()
             let unusedAction = #selector(NSObject.description)
             var controller: StatusWindow? = StatusWindow(target: target, connect: unusedAction,
-                reload: unusedAction, openMusic: unusedAction, changeWidth: unusedAction)
+                reload: unusedAction, openMusic: unusedAction, changeWidth: unusedAction, width: .compact)
             closedController = controller
             closedWindow = controller?.window
             closedContent = controller?.window?.contentView

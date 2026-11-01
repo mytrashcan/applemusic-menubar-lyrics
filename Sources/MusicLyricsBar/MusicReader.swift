@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import LyricsCore
+import os
 
 enum MusicReaderError: Error, LocalizedError {
     case permissionDenied
@@ -16,70 +17,114 @@ enum MusicReaderError: Error, LocalizedError {
     }
 }
 
-/// Read Music's scripting properties directly, without loading the AppleScript runtime.
-/// Property codes come from Music's installed scripting dictionary.
+/// Four-character codes from Music's installed scripting dictionary.
+enum MusicProperty {
+    static let playerState = code("pPlS")
+    static let currentTrack = code("pTrk")
+    static let persistentID = code("pPIS")
+    static let name = code("pnam")
+    static let artist = code("pArt")
+    static let album = code("pAlb")
+    static let duration = code("pDur")
+    static let position = code("pPos")
+    static let playingState = code("kPSP")
+    static let stoppedState = code("kPSS")
+
+    static func code(_ text: StaticString) -> OSType {
+        text.withUTF8Buffer { bytes in
+            precondition(bytes.count == 4, "Four-character code expected")
+            return bytes.reduce(OSType(0)) { $0 << 8 | OSType($1) }
+        }
+    }
+}
+
+/// Reads Music's scripting properties directly, without loading the AppleScript runtime.
+/// Each Apple Event blocks its thread for up to the reply timeout, so reads run on a
+/// dedicated queue rather than the cooperative pool. The actor serializes callers and
+/// remembers the last track so unchanged metadata is not re-read every poll.
 actor MusicReader {
+    private static let logger = Logger(subsystem: "io.github.mytrashcan.MusicLyricsBar", category: "playback")
+    private let queue = BlockingQueue(label: "io.github.mytrashcan.MusicLyricsBar.music-events", qos: .userInitiated)
     private var cachedTrack: Track?
 
-    func sample(refreshMetadata: Bool = false) throws -> PlaybackSample? {
-        guard !NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Music").isEmpty else {
+    func sample(refreshMetadata: Bool = false) async throws -> PlaybackSample? {
+        guard !NSRunningApplication.runningApplications(withBundleIdentifier: MusicEvents.bundleIdentifier).isEmpty else {
             cachedTrack = nil
             return nil
         }
         if refreshMetadata { cachedTrack = nil }
-        return try autoreleasepool {
-            let state = try readProperty(0x70506c53).enumCodeValue // pPlS
-            guard state != 0x6b505353 else { cachedTrack = nil; return nil } // kPSS
-            let currentTrack = try MusicEvents.property(0x7054726b) // pTrk
-            let id = try stringProperty(0x70504953, of: currentTrack) // pPIS
-            let track: Track
-            if let cachedTrack, cachedTrack.id == id {
-                track = cachedTrack
-            } else {
-                track = Track(id: id,
-                    title: try stringProperty(0x706e616d, of: currentTrack), // pnam
-                    artist: try stringProperty(0x70417274, of: currentTrack), // pArt
-                    album: try stringProperty(0x70416c62, of: currentTrack), // pAlb
-                    duration: try numberProperty(0x70447572, of: currentTrack)) // pDur
-            }
-            let position = try numberProperty(0x70506f73) // pPos
-            // Reject a mixed snapshot if playback changed tracks during the reads.
-            guard try stringProperty(0x70504953, of: currentTrack) == id,
-                  track.duration > 0 else { return nil }
-            cachedTrack = track
-            return PlaybackSample(track: track, position: position, isPlaying: state == 0x6b505350,
-                                  sampledAt: ProcessInfo.processInfo.systemUptime) // kPSP
-        }
-    }
-
-    private func stringProperty(_ code: OSType, of container: NSAppleEventDescriptor = .null()) throws -> String {
-        guard let value = try readProperty(code, of: container).stringValue else { throw MusicReaderError.invalidSample }
-        return value
-    }
-
-    private func numberProperty(_ code: OSType, of container: NSAppleEventDescriptor = .null()) throws -> Double {
-        guard let number = try readProperty(code, of: container).coerce(toDescriptorType: typeIEEE64BitFloatingPoint),
-              number.doubleValue.isFinite else { throw MusicReaderError.invalidSample }
-        return number.doubleValue
-    }
-
-    private func readProperty(_ code: OSType, of container: NSAppleEventDescriptor = .null()) throws -> NSAppleEventDescriptor {
-        let event = NSAppleEventDescriptor.appleEvent(withEventClass: kAECoreSuite, eventID: kAEGetData,
-            targetDescriptor: NSAppleEventDescriptor(bundleIdentifier: "com.apple.Music"),
-            returnID: AEReturnID(kAutoGenerateReturnID), transactionID: AETransactionID(kAnyTransactionID))
-        event.setParam(try MusicEvents.property(code, of: container), forKeyword: keyDirectObject)
+        let knownTrack = cachedTrack
         do {
-            return try MusicEvents.value(from: event.sendEvent(options: [.waitForReply, .neverInteract, .dontRecord], timeout: 2))
-        } catch let error as MusicReaderError { throw error }
-        catch {
-            let code = (error as NSError).code
-            if code == -1743 { throw MusicReaderError.permissionDenied }
-            throw MusicReaderError.failed(code)
+            let sample = try await queue.run { _ in try MusicEvents.readSample(knownTrack: knownTrack) }
+            cachedTrack = sample?.track
+            return sample
+        } catch {
+            cachedTrack = nil
+            Self.logger.error("Playback read failed: \(String(describing: error), privacy: .public)")
+            throw error
         }
     }
 }
 
 enum MusicEvents {
+    static let bundleIdentifier = "com.apple.Music"
+    private static let replyTimeout: TimeInterval = 2
+
+    /// One consistent snapshot of playback. Returns nil when Music is stopped or when the
+    /// track changed between reads, so a mixed snapshot never reaches the display.
+    static func readSample(knownTrack: Track?) throws -> PlaybackSample? {
+        try autoreleasepool {
+            let target = NSAppleEventDescriptor(bundleIdentifier: bundleIdentifier)
+            let state = try read(MusicProperty.playerState, target: target).enumCodeValue
+            guard state != MusicProperty.stoppedState else { return nil }
+            let currentTrack = try property(MusicProperty.currentTrack)
+            let id = try string(MusicProperty.persistentID, of: currentTrack, target: target)
+            let track: Track
+            if let knownTrack, knownTrack.id == id {
+                track = knownTrack
+            } else {
+                track = Track(id: id,
+                              title: try string(MusicProperty.name, of: currentTrack, target: target),
+                              artist: try string(MusicProperty.artist, of: currentTrack, target: target),
+                              album: try string(MusicProperty.album, of: currentTrack, target: target),
+                              duration: try number(MusicProperty.duration, of: currentTrack, target: target))
+            }
+            let position = try number(MusicProperty.position, target: target)
+            guard try string(MusicProperty.persistentID, of: currentTrack, target: target) == id,
+                  track.duration > 0 else { return nil }
+            return PlaybackSample(track: track, position: position, isPlaying: state == MusicProperty.playingState,
+                                  sampledAt: ProcessInfo.processInfo.systemUptime)
+        }
+    }
+
+    private static func string(_ code: OSType, of container: NSAppleEventDescriptor = .null(),
+                               target: NSAppleEventDescriptor) throws -> String {
+        guard let value = try read(code, of: container, target: target).stringValue else { throw MusicReaderError.invalidSample }
+        return value
+    }
+
+    private static func number(_ code: OSType, of container: NSAppleEventDescriptor = .null(),
+                               target: NSAppleEventDescriptor) throws -> Double {
+        guard let number = try read(code, of: container, target: target).coerce(toDescriptorType: typeIEEE64BitFloatingPoint),
+              number.doubleValue.isFinite else { throw MusicReaderError.invalidSample }
+        return number.doubleValue
+    }
+
+    private static func read(_ code: OSType, of container: NSAppleEventDescriptor = .null(),
+                             target: NSAppleEventDescriptor) throws -> NSAppleEventDescriptor {
+        let event = NSAppleEventDescriptor.appleEvent(withEventClass: kAECoreSuite, eventID: kAEGetData,
+            targetDescriptor: target, returnID: AEReturnID(kAutoGenerateReturnID),
+            transactionID: AETransactionID(kAnyTransactionID))
+        event.setParam(try property(code, of: container), forKeyword: keyDirectObject)
+        do {
+            return try value(from: event.sendEvent(options: [.waitForReply, .neverInteract, .dontRecord], timeout: replyTimeout))
+        } catch let error as MusicReaderError {
+            throw error
+        } catch {
+            throw readerError(code: (error as NSError).code)
+        }
+    }
+
     static func property(_ code: OSType, of container: NSAppleEventDescriptor = .null()) throws -> NSAppleEventDescriptor {
         let specifier = NSAppleEventDescriptor.record()
         specifier.setDescriptor(NSAppleEventDescriptor(typeCode: typeProperty), forKeyword: AEKeyword(keyAEDesiredClass))
@@ -94,19 +139,13 @@ enum MusicEvents {
 
     static func value(from reply: NSAppleEventDescriptor) throws -> NSAppleEventDescriptor {
         if let error = reply.paramDescriptor(forKeyword: keyErrorNumber), error.int32Value != 0 {
-            if error.int32Value == -1743 { throw MusicReaderError.permissionDenied }
-            throw MusicReaderError.failed(Int(error.int32Value))
+            throw readerError(code: Int(error.int32Value))
         }
         guard let value = reply.paramDescriptor(forKeyword: keyDirectObject) else { throw MusicReaderError.invalidSample }
         return value
     }
-}
 
-actor CacheReader {
-    private let cache = MusicCache()
-
-    func lyrics(for track: Track) throws -> Lyrics? {
-        try Task.checkCancellation()
-        return try cache.lyrics(for: track)
+    private static func readerError(code: Int) -> MusicReaderError {
+        code == Int(errAEEventNotPermitted) ? .permissionDenied : .failed(code)
     }
 }

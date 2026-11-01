@@ -12,7 +12,8 @@ final class StatusWindow: NSWindowController, NSWindowDelegate {
     private let preview = NSImageView()
     private let widthControl = NSPopUpButton(frame: .zero, pullsDown: false)
 
-    init(target: AnyObject, connect: Selector, reload: Selector, openMusic: Selector, changeWidth: Selector) {
+    init(target: AnyObject, connect: Selector, reload: Selector, openMusic: Selector,
+         changeWidth: Selector, width: LyricsWidth) {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 450),
                               styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         window.title = "Music Lyrics Bar · Status"
@@ -30,13 +31,13 @@ final class StatusWindow: NSWindowController, NSWindowDelegate {
         status.textColor = .secondaryLabelColor
         metrics.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         metrics.setAccessibilityIdentifier("playbackMetrics")
-        for (title, width) in [("Width 200pt", 200.0), ("Width 240pt", 240.0), ("Width 360pt", 360.0), ("Width 600pt", 600.0)] {
-            widthControl.addItem(withTitle: title)
-            widthControl.lastItem?.representedObject = width
+        for option in LyricsWidth.allCases {
+            widthControl.addItem(withTitle: option.controlTitle)
+            widthControl.lastItem?.representedObject = option.rawValue
         }
         widthControl.target = target
         widthControl.action = changeWidth
-        setWidth(UserDefaults.standard.double(forKey: "lyricsWidth"))
+        setWidth(width)
         let buttons = NSStackView(views: [connectButton,
             NSButton(title: "Reload Lyrics", target: target, action: reload),
             NSButton(title: "Open Music", target: target, action: openMusic), widthControl,
@@ -93,9 +94,7 @@ final class StatusWindow: NSWindowController, NSWindowDelegate {
         preview.image = image
     }
 
-    func setWidth(_ width: Double) {
-        let index = [200.0, 240.0, 360.0, 600.0].firstIndex(of: width) ?? 0
-        widthControl.selectItem(at: index)
+    func setWidth(_ width: LyricsWidth) {
+        widthControl.selectItem(at: LyricsWidth.allCases.firstIndex(of: width) ?? 0)
     }
-
 }
