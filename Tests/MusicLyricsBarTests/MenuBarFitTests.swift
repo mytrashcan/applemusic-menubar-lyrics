@@ -31,6 +31,22 @@ struct StatusItemPlacementTests {
         #expect(!menuBarHidden.isClipped)
     }
 
+    @Test func occludedItemRightOfTheNotchIsClippedWhenItMovedOrWasNeverSeen() {
+        // Observed on a crowded bar: a 200pt item parked at x 951, just right of the region start, yet occluded.
+        let parked = CGRect(x: 951, y: 1073, width: 216, height: 34)
+        let unseen = StatusItemPlacement(isOccluded: true, frame: parked, hasScreen: true,
+                                         visibleRegionMinX: notchRegionMinX, lastVisibleFrame: nil)
+        #expect(unseen.isClipped)
+        let iconWasVisible = CGRect(x: 1240, y: 1073, width: 38, height: 34)
+        let moved = StatusItemPlacement(isOccluded: true, frame: parked, hasScreen: true,
+                                        visibleRegionMinX: notchRegionMinX, lastVisibleFrame: iconWasVisible)
+        #expect(moved.isClipped)
+        // Our own resize in the same slot keeps the right edge: still the hidden-menu-bar case.
+        let resized = StatusItemPlacement(isOccluded: true, frame: CGRect(x: 1062, y: 1073, width: 216, height: 34),
+                                          hasScreen: true, visibleRegionMinX: notchRegionMinX, lastVisibleFrame: iconWasVisible)
+        #expect(!resized.isClipped)
+    }
+
     @Test func withoutANotchAMovedRightEdgeMeansClipped() {
         let hiddenBar = StatusItemPlacement(isOccluded: true, frame: visibleFrame, hasScreen: true,
                                             visibleRegionMinX: nil, lastVisibleFrame: visibleFrame)
