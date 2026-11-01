@@ -1,5 +1,6 @@
 import Foundation
 import CSQLite
+import os
 
 public enum MusicCacheError: Error, LocalizedError {
     case unavailable
@@ -13,19 +14,55 @@ public enum MusicCacheError: Error, LocalizedError {
     }
 }
 
+/// Cheap fingerprint of the cache files. Equal stamps mean a rescan cannot find anything new,
+/// so callers can skip the SQLite scan and JSON parsing after a miss.
+public struct MusicCacheStamp: Equatable, Sendable {
+    public struct Entry: Equatable, Sendable {
+        public let modified: Date
+        public let size: Int
+
+        public init(modified: Date, size: Int) {
+            self.modified = modified
+            self.size = size
+        }
+    }
+
+    public let entries: [String: Entry]
+
+    public init(entries: [String: Entry]) {
+        self.entries = entries
+    }
+}
+
 /// Opens only the response index and payloads. Never reads request/response headers,
 /// account tokens, or the Music library database, and never writes to Apple's cache.
 public struct MusicCache: Sendable {
     public let directory: URL
     private static let maximumPayloadSize = 8 * 1024 * 1024
+    private static let logger = Logger(subsystem: "io.github.mytrashcan.MusicLyricsBar", category: "cache")
 
     public init(directory: URL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Caches/com.apple.Music", isDirectory: true)) {
         self.directory = directory
     }
 
-    public func lyrics(for track: Track) throws -> Lyrics? {
-        try Task.checkCancellation()
+    /// Modification dates and sizes of the files a scan depends on. Nil when the cache is absent.
+    public func stamp() -> MusicCacheStamp? {
+        var entries: [String: MusicCacheStamp.Entry] = [:]
+        for name in ["Cache.db", "Cache.db-wal", "Cache.db-shm", "fsCachedData"] {
+            let url = directory.appendingPathComponent(name)
+            guard let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey]),
+                  let date = values.contentModificationDate else { continue }
+            entries[name] = .init(modified: date, size: values.fileSize ?? 0)
+        }
+        return entries["Cache.db"] == nil ? nil : MusicCacheStamp(entries: entries)
+    }
+
+    /// `isCancelled` is polled between rows so a caller running this off the cooperative
+    /// pool can still abandon a long scan. It defaults to the current task's cancellation.
+    public func lyrics(for track: Track, isCancelled: @Sendable () -> Bool = { Task.isCancelled }) throws -> Lyrics? {
+        func checkCancellation() throws { if isCancelled() { throw CancellationError() } }
+        try checkCancellation()
         let database = directory.appendingPathComponent("Cache.db")
         guard FileManager.default.fileExists(atPath: database.path) else { throw MusicCacheError.unavailable }
         var connection: OpaquePointer?
@@ -34,7 +71,7 @@ public struct MusicCache: Sendable {
             throw MusicCacheError.unreadable
         }
         defer { sqlite3_close(connection) }
-        try Task.checkCancellation()
+        try checkCancellation()
         sqlite3_busy_timeout(connection, 250)
 
         // Bound work on large caches. Missing or evicted payloads are ordinary cache misses.
@@ -50,32 +87,43 @@ public struct MusicCache: Sendable {
         }
         defer { sqlite3_finalize(statement) }
 
+        var rows = 0
+        var candidates = 0
         while true {
-            try Task.checkCancellation()
+            try checkCancellation()
             let result = sqlite3_step(statement)
-            if result == SQLITE_DONE { return nil }
+            if result == SQLITE_DONE {
+                Self.logger.debug("Cache miss after \(rows, privacy: .public) rows, \(candidates, privacy: .public) matching songs without parseable lyrics")
+                return nil
+            }
             guard result == SQLITE_ROW else { throw MusicCacheError.unreadable }
+            rows += 1
             if let lyrics = autoreleasepool(invoking: { () -> Lyrics? in
                 guard let payload = payload(from: statement) else { return nil }
-                return Self.parse(payload, for: track)
-            }) { return lyrics }
+                return Self.parse(payload, for: track, candidates: &candidates)
+            }) {
+                Self.logger.debug("Cache hit after \(rows, privacy: .public) rows: \(lyrics.lines.count, privacy: .public) lines")
+                return lyrics
+            }
         }
     }
 
-    private static func parse(_ payload: Data, for track: Track) -> Lyrics? {
+    private static func parse(_ payload: Data, for track: Track, candidates: inout Int) -> Lyrics? {
         guard let root = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
               let songs = root["data"] as? [[String: Any]] else { return nil }
         for song in songs {
             guard matches(song, track: track),
                   let relationships = song["relationships"] as? [String: Any] else { continue }
+            candidates += 1
             for key in ["syllable-lyrics", "lyrics"] {
                 guard let relationship = relationships[key] as? [String: Any],
                       let records = relationship["data"] as? [[String: Any]] else { continue }
                 for record in records {
                     guard let attributes = record["attributes"] as? [String: Any] else { continue }
                     for field in ["ttml", "ttmlLocalizations"] {
-                        if let xml = attributes[field] as? String,
-                           let lyrics = try? AppleTTMLParser.parse(xml) { return lyrics }
+                        guard let xml = attributes[field] as? String else { continue }
+                        do { return try AppleTTMLParser.parse(xml) }
+                        catch { logger.debug("Skipping \(key, privacy: .public).\(field, privacy: .public): \(String(describing: error), privacy: .public)") }
                     }
                 }
             }

@@ -10,6 +10,11 @@ struct LyricTextLayout {
     }
 
     static let font = NSFont.systemFont(ofSize: 13)
+    /// Shown before the text while playback is paused.
+    static let pausePrefix = "Ⅱ "
+    /// Joins overlapping lines (duets) into one menu bar string.
+    static let lineSeparator = " / "
+
     let text: String
     let runs: [Run]
     let width: CGFloat
@@ -17,9 +22,27 @@ struct LyricTextLayout {
     let hasWordTiming: Bool
     let duration: Double
 
+    /// The text the renderer draws: lyric lines when there are any, otherwise the fallback as is.
     static func text(lines: [LyricLine], fallback: String, isPlaying: Bool) -> String {
-        let prefix = !isPlaying && !lines.isEmpty ? "Ⅱ " : ""
-        return lines.isEmpty ? fallback : prefix + lines.map { singleLine($0.text) }.joined(separator: " / ")
+        lines.isEmpty ? fallback : prefix(lines: lines, isPlaying: isPlaying) + joined(lines)
+    }
+
+    /// The menu bar label: lyrics while they exist, otherwise the track title, both marked when paused.
+    static func label(lines: [LyricLine], title: String, isPlaying: Bool) -> String {
+        (isPlaying ? "" : pausePrefix) + (lines.isEmpty ? singleLine(title) : joined(lines))
+    }
+
+    /// Lines joined for tooltips and menus, keeping their own line breaks.
+    static func fullText(_ lines: [LyricLine]) -> String {
+        lines.map(\.text).joined(separator: lineSeparator)
+    }
+
+    private static func joined(_ lines: [LyricLine]) -> String {
+        lines.map { singleLine($0.text) }.joined(separator: lineSeparator)
+    }
+
+    private static func prefix(lines: [LyricLine], isPlaying: Bool) -> String {
+        !isPlaying && !lines.isEmpty ? pausePrefix : ""
     }
 
     init(lines: [LyricLine], fallback: String, isPlaying: Bool) {
@@ -31,7 +54,7 @@ struct LyricTextLayout {
         width = textSize.width + 6
         height = textSize.height
         var result: [Run] = []
-        var prefix = !isPlaying && !lines.isEmpty ? "Ⅱ " : ""
+        var prefix = Self.prefix(lines: lines, isPlaying: isPlaying)
         if !prefix.isEmpty {
             result.append(Run(word: nil, x: 0, width: (prefix as NSString).size(withAttributes: attributes).width))
         }
@@ -49,7 +72,7 @@ struct LyricTextLayout {
                     result.append(Run(word: word, x: offset + left, width: max(0, right - left)))
                 }
             }
-            prefix += (source as String) + " / "
+            prefix += (source as String) + Self.lineSeparator
         }
         if lines.isEmpty { result.append(Run(word: nil, x: 0, width: width)) }
         runs = result

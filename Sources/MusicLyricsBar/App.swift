@@ -1,5 +1,6 @@
 import AppKit
 import LyricsCore
+import os
 
 @main
 enum MusicLyricsBarApp {
@@ -14,35 +15,51 @@ enum MusicLyricsBarApp {
 
 @MainActor
 final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
+    private static let logger = Logger(subsystem: "io.github.mytrashcan.MusicLyricsBar", category: "app")
     private let music = MusicReader()
     private let cache = CacheReader()
-    private var item: NSStatusItem!
+    private let preferences = Preferences()
+    private let statusImageRenderer = StatusImageRenderer()
+    private var item: NSStatusItem?
+    private var statusWindow: StatusWindow?
+    private lazy var displayWidth = preferences.lyricsWidth
+
+    // Playback polling.
+    private var poller = PollScheduler()
     private var pollTask: Task<Void, Never>?
-    private var cacheTask: Task<Void, Never>?
-    private var displayTimer: Timer?
     private var pollTimer: Timer?
-    private var sampleRequested = false
-    private var metadataRequested = false
-    private var observers: [NSObjectProtocol] = []
-    private var distributedObservers: [NSObjectProtocol] = []
-    private var workspaceObservers: [NSObjectProtocol] = []
+    private var isConnected = false
     private var sample: PlaybackSample?
+
+    // Lyrics lookup.
+    private var rescan = CacheRescanPolicy()
+    private var cacheTask: Task<Void, Never>?
+    private var nextCacheProbe: TimeInterval = 0
     private var lyrics: Lyrics?
-    private var nextCacheRead: TimeInterval = 0
+
+    // Display.
+    private var displayTimer: Timer?
     private var message = "Connect to Music from the menu."
     private var currentText = ""
-    private var isConnected = false
-    private var statusWindow: StatusWindow?
+    private var displayedTitle = ""
+    private var lastStatusUpdate = 0.0
+
+    // Diagnostics shown in the status window.
     private var sampleCount = 0
     private var playbackNotifications = 0
     private var sampleMilliseconds = 0.0
     private var cacheMilliseconds = 0.0
-    private var lastStatusUpdate = 0.0
-    private let statusImageRenderer = StatusImageRenderer()
-    private var displayedTitle = ""
+
+    private var observers: [NSObjectProtocol] = []
+    private var distributedObservers: [NSObjectProtocol] = []
+    private var workspaceObservers: [NSObjectProtocol] = []
+
+    private var uptime: TimeInterval { ProcessInfo.processInfo.systemUptime }
+
+    // MARK: Application lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.autosaveName = "MusicLyricsBar.Lyrics"
         if let button = item.button {
             button.imagePosition = .imageOnly
@@ -52,11 +69,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
         item.menu = menu
+        self.item = item
         updateItemWidth()
         observePlaybackChanges()
         render()
-        if UserDefaults.standard.bool(forKey: "connectOnLaunch") { connect() }
-        else { showStatus() }
+        if preferences.connectOnLaunch { connect() } else { showStatus() }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -65,147 +82,12 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        pollTask?.cancel()
-        cacheTask?.cancel()
+        cancelPolling()
+        cancelLyricsLookup()
         displayTimer?.invalidate()
-        pollTimer?.invalidate()
         for observer in workspaceObservers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
         for observer in distributedObservers { DistributedNotificationCenter.default().removeObserver(observer) }
-    }
-
-    func menuWillOpen(_ menu: NSMenu) {
-        menu.removeAllItems()
-        add(sample.map { "\($0.track.title) — \($0.track.artist)" } ?? "Music Lyrics Bar", to: menu)
-        add(message, to: menu)
-        menu.addItem(.separator())
-        if !currentText.isEmpty { add(currentText, to: menu); menu.addItem(.separator()) }
-        if let lyrics, let sample {
-            let position = sample.position(at: ProcessInfo.processInfo.systemUptime)
-            if let index = lyrics.lines.lastIndex(where: { $0.start <= position }) {
-                let context = NSMenuItem(title: "Nearby Lyrics", action: nil, keyEquivalent: "")
-                let submenu = NSMenu()
-                for i in max(0, index - 2)...min(lyrics.lines.count - 1, index + 2) {
-                    let line = lyrics.lines[i]
-                    let active = lyrics.displayLines(at: position).contains(line)
-                    add((active ? "♪ " : "") + line.text, to: submenu)
-                }
-                context.submenu = submenu
-                menu.addItem(context)
-            }
-        }
-        addAction(isConnected ? "Reconnect to Music" : "Connect to Music…", action: #selector(connect), to: menu)
-        addAction("Show Status", action: #selector(showStatus), to: menu)
-        let reconnect = NSMenuItem(title: "Connect on Launch", action: #selector(toggleConnectOnLaunch), keyEquivalent: "")
-        reconnect.target = self
-        reconnect.state = UserDefaults.standard.bool(forKey: "connectOnLaunch") ? .on : .off
-        menu.addItem(reconnect)
-        let widthItem = NSMenuItem(title: "Lyrics Width", action: nil, keyEquivalent: "")
-        let widths = NSMenu()
-        for (title, width) in [("Compact · 200pt", 200.0), ("Narrow · 240pt", 240.0), ("Medium · 360pt", 360.0), ("Wide · 600pt", 600.0)] {
-            let entry = NSMenuItem(title: title, action: #selector(changeWidth(_:)), keyEquivalent: "")
-            entry.target = self
-            entry.representedObject = width
-            entry.state = displayWidth == width ? .on : .off
-            widths.addItem(entry)
-        }
-        widthItem.submenu = widths
-        menu.addItem(widthItem)
-        addAction("Reload Lyrics Cache", action: #selector(reloadLyrics), to: menu)
-        addAction("Open Music", action: #selector(openMusic), to: menu)
-        menu.addItem(.separator())
-        add("Lyrics source: Apple Music cache on this Mac", to: menu)
-        addAction("Quit", action: #selector(quit), to: menu, key: "q")
-    }
-
-    @objc private func connect() {
-        UserDefaults.standard.set(true, forKey: "connectOnLaunch")
-        pollTask?.cancel()
-        cacheTask?.cancel()
-        cacheTask = nil
-        isConnected = true
-        sample = nil
-        lyrics = nil
-        sampleCount = 0
-        message = "Connecting to Music…"
-        pollTimer?.invalidate()
-        pollTask = nil
-        requestSample(refreshMetadata: true)
-    }
-
-    @objc private func toggleConnectOnLaunch() {
-        let enabled = UserDefaults.standard.bool(forKey: "connectOnLaunch")
-        UserDefaults.standard.set(!enabled, forKey: "connectOnLaunch")
-    }
-
-    private func requestSample(refreshMetadata: Bool = false) {
-        guard isConnected else { return }
-        pollTimer?.invalidate()
-        metadataRequested = metadataRequested || refreshMetadata
-        guard pollTask == nil else { sampleRequested = true; return }
-        let refreshMetadata = metadataRequested
-        metadataRequested = false
-        sampleRequested = false
-        pollTask = Task { [weak self] in
-            guard let self else { return }
-            var retryAfterFailure = false
-            do {
-                let sampleStarted = ProcessInfo.processInfo.systemUptime
-                let result = try await music.sample(refreshMetadata: refreshMetadata)
-                guard !Task.isCancelled else { return }
-                sampleMilliseconds = (ProcessInfo.processInfo.systemUptime - sampleStarted) * 1000
-                sampleCount += 1
-                if result?.track != sample?.track {
-                    cacheTask?.cancel()
-                    cacheTask = nil
-                    lyrics = nil
-                    nextCacheRead = 0
-                }
-                sample = result
-                if let result {
-                    let now = ProcessInfo.processInfo.systemUptime
-                    if lyrics == nil, cacheTask == nil, now >= nextCacheRead {
-                        loadLyrics(for: result.track)
-                    }
-                } else {
-                    message = "Play a song in Music."
-                }
-                render()
-            } catch {
-                guard !Task.isCancelled else { return }
-                cacheTask?.cancel()
-                cacheTask = nil
-                sample = nil
-                lyrics = nil
-                message = error.localizedDescription
-                retryAfterFailure = true
-                let permissionDenied = (error as? MusicReaderError).map {
-                    if case .permissionDenied = $0 { return true }
-                    return false
-                } ?? false
-                isConnected = !permissionDenied
-                if permissionDenied {
-                    UserDefaults.standard.set(false, forKey: "connectOnLaunch")
-                    showStatus()
-                }
-                render()
-            }
-            pollTask = nil
-            guard isConnected else { return }
-            if sampleRequested {
-                requestSample()
-            } else {
-                // Notifications wake paused/stopped playback immediately. These
-                // low-rate fallbacks also recover if Music omits a notification.
-                let delay = retryAfterFailure || sample?.isPlaying == true ? 0.5 : (sample == nil ? 10.0 : 2.0)
-                let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
-                    MainActor.assumeIsolated { self?.requestSample() }
-                }
-                timer.tolerance = delay * 0.1
-                RunLoop.main.add(timer, forMode: .common)
-                pollTimer = timer
-            }
-        }
     }
 
     private func observePlaybackChanges() {
@@ -222,11 +104,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let workspace = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification,
                      NSWorkspace.didWakeNotification] {
-            // Workspace observers have a separate center and are removed with
-            // the controller's application lifetime.
             workspaceObservers.append(workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
                 let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-                if name == NSWorkspace.didWakeNotification || app?.bundleIdentifier == "com.apple.Music" {
+                if name == NSWorkspace.didWakeNotification || app?.bundleIdentifier == MusicEvents.bundleIdentifier {
                     MainActor.assumeIsolated { self?.requestSample(refreshMetadata: true) }
                 }
             })
@@ -238,57 +118,104 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         })
     }
 
-    @objc private func reloadLyrics() {
-        cacheTask?.cancel()
-        cacheTask = nil
+    // MARK: Menu
+
+    func menuWillOpen(_ menu: NSMenu) {
+        menu.removeAllItems()
+        add(sample.map { "\($0.track.title) — \($0.track.artist)" } ?? "Music Lyrics Bar", to: menu)
+        add(message, to: menu)
+        menu.addItem(.separator())
+        if !currentText.isEmpty {
+            add(currentText, to: menu)
+            menu.addItem(.separator())
+        }
+        if let lyrics, let sample {
+            let position = sample.position(at: uptime)
+            if let index = lyrics.lines.lastIndex(where: { $0.start <= position }) {
+                let shown = lyrics.displayLines(at: position)
+                let context = NSMenuItem(title: "Nearby Lyrics", action: nil, keyEquivalent: "")
+                let submenu = NSMenu()
+                for i in max(0, index - 2)...min(lyrics.lines.count - 1, index + 2) {
+                    let line = lyrics.lines[i]
+                    add((shown.contains(line) ? "♪ " : "") + line.text, to: submenu)
+                }
+                context.submenu = submenu
+                menu.addItem(context)
+            }
+        }
+        addAction(isConnected ? "Reconnect to Music" : "Connect to Music…", action: #selector(connect), to: menu)
+        addAction("Show Status", action: #selector(showStatus), to: menu)
+        let reconnect = NSMenuItem(title: "Connect on Launch", action: #selector(toggleConnectOnLaunch), keyEquivalent: "")
+        reconnect.target = self
+        reconnect.state = preferences.connectOnLaunch ? .on : .off
+        menu.addItem(reconnect)
+        let widthItem = NSMenuItem(title: "Lyrics Width", action: nil, keyEquivalent: "")
+        let widths = NSMenu()
+        for option in LyricsWidth.allCases {
+            let entry = NSMenuItem(title: option.menuTitle, action: #selector(changeWidth(_:)), keyEquivalent: "")
+            entry.target = self
+            entry.representedObject = option.rawValue
+            entry.state = displayWidth == option ? .on : .off
+            widths.addItem(entry)
+        }
+        widthItem.submenu = widths
+        menu.addItem(widthItem)
+        addAction("Reload Lyrics Cache", action: #selector(reloadLyrics), to: menu)
+        addAction("Open Music", action: #selector(openMusic), to: menu)
+        menu.addItem(.separator())
+        add("Lyrics source: Apple Music cache on this Mac", to: menu)
+        addAction("Quit", action: #selector(quit), to: menu, key: "q")
+    }
+
+    private func add(_ title: String, to menu: NSMenu) {
+        let entry = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        entry.isEnabled = false
+        menu.addItem(entry)
+    }
+
+    private func addAction(_ title: String, action: Selector, to menu: NSMenu, key: String = "") {
+        let entry = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        entry.target = self
+        menu.addItem(entry)
+    }
+
+    // MARK: Actions
+
+    @objc private func connect() {
+        preferences.connectOnLaunch = true
+        cancelPolling()
+        cancelLyricsLookup()
+        isConnected = true
+        sample = nil
         lyrics = nil
-        nextCacheRead = 0
+        sampleCount = 0
+        message = "Connecting to Music…"
+        requestSample(refreshMetadata: true)
+    }
+
+    @objc private func toggleConnectOnLaunch() {
+        preferences.connectOnLaunch.toggle()
+    }
+
+    @objc private func reloadLyrics() {
+        cancelLyricsLookup()
+        lyrics = nil
         if !isConnected { connect() }
         render()
     }
 
-    private func loadLyrics(for track: Track) {
-        let started = ProcessInfo.processInfo.systemUptime
-        nextCacheRead = started + 3
-        message = "Looking for lyrics in the Music cache…"
-        // Cache I/O must never stop playback polling. Reject a late result after
-        // a track change or refresh, even when synchronous SQLite work finishes late.
-        cacheTask = Task { [weak self] in
-            guard let self else { return }
-            do {
-                let loaded = try await cache.lyrics(for: track)
-                guard !Task.isCancelled, sample?.track == track else { return }
-                cacheMilliseconds = (ProcessInfo.processInfo.systemUptime - started) * 1000
-                lyrics = loaded
-                message = loaded == nil
-                    ? "No synced lyrics · Open this song’s lyrics in Music."
-                    : "Apple Music lyrics · Synced to playback."
-            } catch {
-                guard !Task.isCancelled, sample?.track == track else { return }
-                message = error.localizedDescription
-            }
-            cacheTask = nil
-            render()
-        }
-    }
-
     @objc private func openMusic() {
-        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Music") {
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: MusicEvents.bundleIdentifier) {
             NSWorkspace.shared.openApplication(at: url, configuration: .init())
         }
     }
 
     @objc private func quit() { NSApp.terminate(nil) }
 
-    private var displayWidth: Double = {
-        let saved = UserDefaults.standard.double(forKey: "lyricsWidth")
-        return [200.0, 240.0, 360.0, 600.0].contains(saved) ? saved : 200
-    }()
-
     @objc private func changeWidth(_ sender: NSMenuItem) {
-        guard let width = sender.representedObject as? Double else { return }
+        guard let points = sender.representedObject as? Double, let width = LyricsWidth(rawValue: points) else { return }
         displayWidth = width
-        UserDefaults.standard.set(width, forKey: "lyricsWidth")
+        preferences.lyricsWidth = width
         updateItemWidth()
         statusWindow?.setWidth(width)
         displayedTitle = ""
@@ -303,7 +230,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if statusWindow == nil {
             statusWindow = StatusWindow(target: self, connect: #selector(connect),
                                         reload: #selector(reloadLyrics), openMusic: #selector(openMusic),
-                                        changeWidth: #selector(changeWidthControl(_:)))
+                                        changeWidth: #selector(changeWidthControl(_:)), width: displayWidth)
         }
         statusWindow?.onClose = { [weak self] in self?.statusWindow = nil }
         lastStatusUpdate = 0
@@ -311,10 +238,129 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         render()
     }
 
+    // MARK: Playback polling
+
+    private func requestSample(refreshMetadata: Bool = false) {
+        guard isConnected else { return }
+        pollTimer?.invalidate()
+        pollTimer = nil
+        guard let refreshMetadata = poller.request(refreshMetadata: refreshMetadata) else { return }
+        pollTask = Task { [weak self] in
+            guard let self else { return }
+            var failed = false
+            do {
+                let started = uptime
+                let result = try await music.sample(refreshMetadata: refreshMetadata)
+                guard !Task.isCancelled else { return }
+                sampleMilliseconds = (uptime - started) * 1000
+                sampleCount += 1
+                if result?.track != sample?.track {
+                    cancelLyricsLookup()
+                    lyrics = nil
+                }
+                sample = result
+                if let result { lookUpLyricsIfNeeded(for: result.track) } else { message = "Play a song in Music." }
+            } catch {
+                guard !Task.isCancelled else { return }
+                failed = true
+                handleSampleFailure(error)
+            }
+            render()
+            pollTask = nil
+            guard isConnected else { return }
+            switch poller.finish(sample: sample, failed: failed) {
+            case .pollNow: requestSample()
+            case .wait(let delay): schedulePoll(after: delay)
+            }
+        }
+    }
+
+    /// A transient read error (for example a track change mid-read) keeps the last sample on
+    /// screen; its clock stops extrapolating on its own. Only a denied permission disconnects.
+    private func handleSampleFailure(_ error: Error) {
+        message = error.localizedDescription
+        guard case .permissionDenied? = error as? MusicReaderError else { return }
+        isConnected = false
+        preferences.connectOnLaunch = false
+        cancelLyricsLookup()
+        sample = nil
+        lyrics = nil
+        showStatus()
+    }
+
+    private func schedulePoll(after delay: TimeInterval) {
+        let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.requestSample() }
+        }
+        timer.tolerance = delay * 0.1
+        RunLoop.main.add(timer, forMode: .common)
+        pollTimer = timer
+    }
+
+    private func cancelPolling() {
+        pollTask?.cancel()
+        pollTask = nil
+        pollTimer?.invalidate()
+        pollTimer = nil
+        poller.reset()
+    }
+
+    // MARK: Lyrics lookup
+
+    private func lookUpLyricsIfNeeded(for track: Track) {
+        let now = uptime
+        guard lyrics == nil, cacheTask == nil, now >= nextCacheProbe else { return }
+        nextCacheProbe = now + CacheRescanPolicy.probeInterval
+        // Cache I/O must never stop playback polling. Reject a late result after
+        // a track change or refresh, even when synchronous SQLite work finishes late.
+        cacheTask = Task { [weak self] in
+            guard let self else { return }
+            let started = uptime
+            let stamp = try? await cache.stamp()
+            guard !Task.isCancelled, sample?.track == track else { return }
+            guard rescan.shouldScan(stamp: stamp, now: started) else {
+                cacheTask = nil
+                return
+            }
+            message = "Looking for lyrics in the Music cache…"
+            do {
+                let loaded = try await cache.lyrics(for: track)
+                guard !Task.isCancelled, sample?.track == track else { return }
+                cacheMilliseconds = (uptime - started) * 1000
+                lyrics = loaded
+                if let loaded {
+                    rescan.reset()
+                    message = "Apple Music lyrics · Synced to playback."
+                    Self.logger.info("Lyrics found: \(loaded.lines.count, privacy: .public) lines in \(self.cacheMilliseconds, format: .fixed(precision: 1), privacy: .public) ms")
+                } else {
+                    rescan.recordMiss(stamp: stamp, now: uptime)
+                    message = "No synced lyrics · Open this song’s lyrics in Music."
+                    Self.logger.info("Lyrics miss in \(self.cacheMilliseconds, format: .fixed(precision: 1), privacy: .public) ms")
+                }
+            } catch {
+                guard !Task.isCancelled, sample?.track == track else { return }
+                rescan.recordMiss(stamp: stamp, now: uptime)
+                message = error.localizedDescription
+                Self.logger.error("Lyrics lookup failed: \(String(describing: error), privacy: .public)")
+            }
+            cacheTask = nil
+            render()
+        }
+    }
+
+    private func cancelLyricsLookup() {
+        cacheTask?.cancel()
+        cacheTask = nil
+        nextCacheProbe = 0
+        rescan.reset()
+    }
+
+    // MARK: Display
+
     private func updateItemWidth() {
         guard let item else { return }
         let screenWidth = (item.button?.window?.screen ?? NSScreen.main)?.frame.width ?? 1000
-        item.length = min(displayWidth, screenWidth * 0.45)
+        item.length = min(displayWidth.points, screenWidth * 0.45)
     }
 
     private func render() {
@@ -325,24 +371,23 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         displayTimer?.invalidate()
         displayTimer = nil
         guard let item else { return }
-        let position = sample?.position(at: ProcessInfo.processInfo.systemUptime) ?? 0
+        let position = sample?.position(at: uptime) ?? 0
         let lines = lyrics?.displayLines(at: position) ?? []
-        currentText = lines.map(\.text).joined(separator: " / ")
+        currentText = LyricTextLayout.fullText(lines)
         let label: String
         if let sample {
-            label = (sample.isPlaying ? "" : "Ⅱ ") + (currentText.isEmpty ? sample.track.title : currentText)
+            label = LyricTextLayout.label(lines: lines, title: sample.track.title, isPlaying: sample.isPlaying)
         } else {
             label = isConnected ? "Waiting for Music" : "Connect to Music"
         }
-        let singleLine = label.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\r", with: " ")
         let button = item.button
-        let titleChanged = displayedTitle != singleLine
+        let titleChanged = displayedTitle != label
         if titleChanged {
-            displayedTitle = singleLine
-            button?.setAccessibilityValue(singleLine)
+            displayedTitle = label
+            button?.setAccessibilityValue(label)
         }
         let tooltip = currentText.isEmpty ? message : currentText
-        if let image = statusImageRenderer.image(lines: lines, fallback: singleLine, position: position,
+        if let image = statusImageRenderer.image(lines: lines, fallback: label, position: position,
                                                  isPlaying: sample?.isPlaying ?? false,
                                                  size: NSSize(width: item.length, height: NSStatusBar.system.thickness)) {
             button?.image = image
@@ -362,32 +407,20 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         if button?.toolTip != tooltip { button?.toolTip = tooltip }
-        let uptime = ProcessInfo.processInfo.systemUptime
+        let now = uptime
         // Diagnostic counters only need an update while the status window is open.
         guard let statusWindow,
               lastStatusUpdate == 0 || (statusWindow.window?.isVisible == true &&
-                  (titleChanged || uptime - lastStatusUpdate >= 1)) else { return }
-        lastStatusUpdate = uptime
+                  (titleChanged || now - lastStatusUpdate >= 1)) else { return }
+        lastStatusUpdate = now
         let playback = sample.map { $0.isPlaying ? "Playing" : "Paused" } ?? "Waiting"
         statusWindow.update(
             track: sample.map { "\($0.track.title) — \($0.track.artist)" } ?? "Music Lyrics Bar",
-            lyric: currentText.isEmpty ? singleLine : currentText,
+            lyric: currentText.isEmpty ? label : currentText,
             status: message,
             metrics: String(format: "%@ · Position %.2fs · Polls %d · Events %d\nPlayback %.1fms · Cache %.1fms · Lines %d · Timed spans %d",
                             playback, position, sampleCount, playbackNotifications, sampleMilliseconds, cacheMilliseconds, lyrics?.lines.count ?? 0,
                             lyrics?.lines.reduce(0) { $0 + $1.words.count } ?? 0),
             connected: isConnected)
-    }
-
-    private func add(_ title: String, to menu: NSMenu) {
-        let entry = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        entry.isEnabled = false
-        menu.addItem(entry)
-    }
-
-    private func addAction(_ title: String, action: Selector, to menu: NSMenu, key: String = "") {
-        let entry = NSMenuItem(title: title, action: action, keyEquivalent: key)
-        entry.target = self
-        menu.addItem(entry)
     }
 }

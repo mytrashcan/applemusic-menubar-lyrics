@@ -1,4 +1,5 @@
 import Foundation
+import os
 import Testing
 import CSQLite
 @testable import LyricsCore
@@ -21,7 +22,7 @@ final class MusicCacheTests {
         try? FileManager.default.removeItem(at: directory)
     }
 
-    @Test func testReadsInlineLyricsWithoutChangingDatabase() throws {
+    @Test func readsInlineLyricsWithoutChangingDatabase() throws {
         try insert(id: 1, data: payload())
         let database = directory.appendingPathComponent("Cache.db")
         let before = try Data(contentsOf: database)
@@ -29,7 +30,7 @@ final class MusicCacheTests {
         #expect(try Data(contentsOf: database) == before)
     }
 
-    @Test func testReadsFilePayloadAndSkipsEvictedAndMalformedEntries() throws {
+    @Test func readsFilePayloadAndSkipsEvictedAndMalformedEntries() throws {
         try Data(payload()).write(to: directory.appendingPathComponent("fsCachedData/valid"))
         try insert(id: 1, data: Data("valid".utf8), file: true)
         try insert(id: 2, data: Data("evicted".utf8), file: true)
@@ -37,21 +38,21 @@ final class MusicCacheTests {
         #expect(try MusicCache(directory: directory).lyrics(for: track)?.lines.count == 1)
     }
 
-    @Test func testRejectsOtherArtistsAlbumsAndVersions() throws {
+    @Test func rejectsOtherArtistsAlbumsAndVersions() throws {
         try insert(id: 1, data: payload(artist: "Other artist"))
         try insert(id: 2, data: payload(album: "Live album"))
         try insert(id: 3, data: payload(duration: 50_000))
         #expect(try MusicCache(directory: directory).lyrics(for: track) == nil)
     }
 
-    @Test func testRetriesMissAfterMusicPopulatesCache() throws {
+    @Test func retriesMissAfterMusicPopulatesCache() throws {
         let cache = MusicCache(directory: directory)
         #expect(try cache.lyrics(for: track) == nil)
         try insert(id: 1, data: payload())
         #expect(try cache.lyrics(for: track) != nil)
     }
 
-    @Test func testRejectsTraversalAndExternalSymlinkPayloads() throws {
+    @Test func rejectsTraversalAndExternalSymlinkPayloads() throws {
         let external = directory.appendingPathComponent("outside.json")
         try payload().write(to: external)
         try FileManager.default.createSymbolicLink(at: directory.appendingPathComponent("fsCachedData/link"),
@@ -61,7 +62,28 @@ final class MusicCacheTests {
         #expect(try MusicCache(directory: directory).lyrics(for: track) == nil)
     }
 
-    @Test func testReportsMissingAndUnsupportedDatabase() throws {
+    @Test func stampChangesWhenRowsAreAddedAndIsNilWithoutADatabase() throws {
+        let cache = MusicCache(directory: directory)
+        let empty = try #require(cache.stamp())
+        Thread.sleep(forTimeInterval: 0.02)
+        try insert(id: 1, data: payload())
+        let populated = try #require(cache.stamp())
+        #expect(populated != empty)
+        #expect(cache.stamp() == populated)
+        #expect(MusicCache(directory: directory.appendingPathComponent("missing")).stamp() == nil)
+    }
+
+    @Test func cancellationCallbackStopsAScanBetweenRows() throws {
+        // Newest rows scan first; the fourth cancellation poll fires before the matching older row.
+        try insert(id: 1, data: payload())
+        try insert(id: 2, data: payload(artist: "Other artist"))
+        let polls = OSAllocatedUnfairLock(initialState: 0)
+        #expect(throws: CancellationError.self) {
+            try MusicCache(directory: directory).lyrics(for: track) { polls.withLock { $0 += 1; return $0 > 3 } }
+        }
+    }
+
+    @Test func reportsMissingAndUnsupportedDatabase() throws {
         #expect(throws: (any Error).self) { try MusicCache(directory: directory.appendingPathComponent("missing")).lyrics(for: track) }
         try execute("DROP TABLE cfurl_cache_receiver_data")
         #expect(throws: (any Error).self) { try MusicCache(directory: directory).lyrics(for: track) }

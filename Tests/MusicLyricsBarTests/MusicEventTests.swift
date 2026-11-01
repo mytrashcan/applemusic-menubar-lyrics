@@ -4,9 +4,15 @@ import Testing
 @testable import MusicLyricsBar
 
 struct MusicEventTests {
+    @Test func fourCharacterCodesMatchTheScriptingDictionary() {
+        #expect(MusicProperty.code("pnam") == 0x706e616d)
+        #expect(MusicProperty.currentTrack == 0x7054726b)
+        #expect(MusicProperty.playerState == 0x70506c53)
+    }
+
     @Test func nestedPropertyReferenceUsesNativeObjectSpecifiers() throws {
-        let track = try MusicEvents.property(0x7054726b)
-        let title = try MusicEvents.property(0x706e616d, of: track)
+        let track = try MusicEvents.property(MusicProperty.currentTrack)
+        let title = try MusicEvents.property(MusicProperty.name, of: track)
         #expect(title.descriptorType == typeObjectSpecifier)
         #expect(title.forKeyword(AEKeyword(keyAEDesiredClass))?.typeCodeValue == typeProperty)
         #expect(title.forKeyword(AEKeyword(keyAEKeyForm))?.enumCodeValue == OSType(formPropertyID))

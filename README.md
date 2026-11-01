@@ -113,7 +113,7 @@ subsequent launches can connect without opening the status window.
 
 The display timer stops while paused or disconnected and sleeps until the next relevant boundary between timed words. Static text does not trigger continuous redraws. The menu bar and status preview share one cached image; text is rasterized once per lyric change. Closing the status window releases its controller and views. Subsequent launches can connect without constructing the status window.
 
-Music playback notifications trigger immediate reads, with periodic fallbacks to recover from missed notifications. Cache reads remain independent, and cancelled requests stop before queued work proceeds. JSON payloads are released between cache rows rather than accumulating during a scan.
+Music playback notifications trigger immediate reads, with periodic fallbacks to recover from missed notifications; repeated read failures back off to ten seconds. Cache reads remain independent, and cancelled requests stop before queued work proceeds. After a cache miss the app only checks a cheap file stamp every three seconds and rescans the cache when its files change or after a minute. Apple Events and SQLite run on dedicated threads rather than the Swift concurrency pool. JSON payloads are released between cache rows rather than accumulating during a scan.
 
 Measure CPU time and physical memory footprint locally with the standard-library helper:
 

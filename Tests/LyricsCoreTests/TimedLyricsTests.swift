@@ -3,7 +3,7 @@ import Testing
 @testable import LyricsCore
 
 struct TimedLyricsTests {
-    @Test func testAppleAbsoluteTimesNestedSpansEntitiesAndMetadata() throws {
+    @Test func appleAbsoluteTimesNestedSpansEntitiesAndMetadata() throws {
         let xml = """
         <tt xmlns="http://www.w3.org/ns/ttml"><head><metadata>
         <p begin="0" end="90">Not lyrics</p></metadata></head>
@@ -24,7 +24,7 @@ struct TimedLyricsTests {
         #expect(lyrics.activeLines(at: 16).isEmpty)
     }
 
-    @Test func testClockFormatsAndInvalidTimes() {
+    @Test func clockFormatsAndInvalidTimes() {
         for (source, expected) in [("00:01:02.345", 62.345), ("1:02.345", 62.345),
                                    ("62.345", 62.345), ("234ms", 0.234), ("3.5s", 3.5)] {
             #expect(abs(AppleTTMLParser.seconds(source)! - expected) < 0.00001)
@@ -34,13 +34,13 @@ struct TimedLyricsTests {
         }
     }
 
-    @Test func testRejectsMalformedAndUntimedDocuments() {
+    @Test func rejectsMalformedAndUntimedDocuments() {
         #expect(throws: (any Error).self) { try AppleTTMLParser.parse("<tt><body>") }
         #expect(throws: (any Error).self) { try AppleTTMLParser.parse("<tt><body><p>Untimed</p></body></tt>") }
         #expect(throws: (any Error).self) { try AppleTTMLParser.parse("<tt><body><p begin=\"3\" end=\"2\">Invalid</p></body></tt>") }
     }
 
-    @Test func testDuetsAndBackwardsSeek() {
+    @Test func duetsAndBackwardsSeek() {
         let lyrics = Lyrics(lines: [LyricLine(start: 5, end: 8, text: "Second voice"),
                                     LyricLine(start: 2, end: 6, text: "First voice")])
         #expect(lyrics.activeLines(at: 5).map(\.text) == ["First voice", "Second voice"])
@@ -48,7 +48,7 @@ struct TimedLyricsTests {
         #expect(lyrics.activeLines(at: .nan).isEmpty)
     }
 
-    @Test func testPlaybackClockPausesSeeksAndBoundsStaleSamples() {
+    @Test func playbackClockPausesSeeksAndBoundsStaleSamples() {
         let track = Track(id: "test", title: "Example", artist: "Example", album: "", duration: 30)
         let playing = PlaybackSample(track: track, position: 10, isPlaying: true, sampledAt: 100)
         #expect(abs(playing.position(at: 100.4) - 10.4) < 0.001)
@@ -59,7 +59,7 @@ struct TimedLyricsTests {
         #expect(end.position(at: 101) == 30)
     }
 
-    @Test func testDisplayHoldsPreviousLineThroughGapAndResolvesSeeks() {
+    @Test func displayHoldsPreviousLineThroughGapAndResolvesSeeks() {
         let first = LyricLine(start: 2, end: 4, text: "First synthetic line")
         let next = LyricLine(start: 7, end: 9, text: "Next synthetic line")
         let lyrics = Lyrics(lines: [first, next])
@@ -85,7 +85,7 @@ struct TimedLyricsTests {
         #expect(lyrics.nextLineBoundary(after: .nan) == nil)
     }
 
-    @Test func testWordTimingRangesUnicodeEntitiesAndNestedSpans() throws {
+    @Test func wordTimingRangesUnicodeEntitiesAndNestedSpans() throws {
         let xml = """
         <tt><body><p begin="1" end="6">  <span begin="1" end="2">音🎵</span> <span begin="3" end="5"><span>two &amp; three</span></span> </p></body></tt>
         """
