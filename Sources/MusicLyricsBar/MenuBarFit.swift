@@ -26,10 +26,13 @@ struct StatusItemPlacement: Equatable, Sendable {
     var isClipped: Bool {
         guard isOccluded else { return false }
         guard let frame, hasScreen else { return true }
-        if let visibleRegionMinX { return frame.minX < visibleRegionMinX - 1 }
+        // Left of the notch region is certainly out. The converse does not hold: a 200pt item
+        // was observed occluded at x 951 on a display whose region starts at 947.5, so an item
+        // right of the boundary still has to pass the movement test below.
+        if let visibleRegionMinX, frame.minX < visibleRegionMinX - 1 { return true }
         guard let lastVisibleFrame else { return true }
-        // Without a notch there is no fixed boundary; a resize of our own keeps the right edge,
-        // so a right edge that moved while occluded means macOS relocated the item.
+        // A resize of our own keeps the right edge; a right edge that moved while occluded
+        // means macOS relocated the item. A hidden menu bar leaves the frame where it was.
         return abs(frame.maxX - lastVisibleFrame.maxX) > 0.5
     }
 }

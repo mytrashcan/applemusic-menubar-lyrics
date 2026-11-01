@@ -25,3 +25,14 @@ struct StatusWindowTests {
         #expect(closedContent == nil)
     }
 }
+
+struct LyricPopoverTests {
+    @MainActor @Test func sizesItsContentToThePreviewWidth() {
+        _ = NSApplication.shared
+        let popover = LyricPopover(width: 240)
+        #expect(popover.contentSize.width >= 240 + 2 * LyricPopover.padding)
+        #expect(popover.contentSize.height > NSStatusBar.system.thickness)
+        popover.setWidth(600)
+        #expect(popover.contentSize.width >= 600 + 2 * LyricPopover.padding)
+    }
+}

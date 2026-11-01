@@ -90,8 +90,16 @@ track names are included.
 
 The app therefore treats an item as clipped only when its window is occluded **and**
 its frame moved: no screen, or `minX` left of `auxiliaryTopRightArea.minX` on a
-notched display, or a changed right edge on displays without a notch. An occluded
-window whose frame did not move is a hidden menu bar and leaves the width alone.
+notched display, or a right edge that differs from the last frame seen while
+visible. An occluded window whose frame did not move is a hidden menu bar and
+leaves the width alone.
+
+A later run on the owner's real, fuller menu bar (v0.0.4 installed in
+Applications) added one row: a 200pt item that did not fit was parked at
+x 951, just right of the region start at 947.5, and stayed occluded there at
+every retry. The notch boundary alone therefore proves "out" but not "in", and
+the right-edge comparison now applies on notched displays too; without it the
+app looped 200 → 240 → clipped → 200 and never reached the icon.
 
 ## Auto-shrink, observed in the app
 
