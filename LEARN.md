@@ -78,12 +78,12 @@ its URL cache:
 ~/Library/Caches/com.apple.Music/fsCachedData/
 ```
 
-Open a copy, not the live file, and look at the schema:
+Open a copy, not the live file — the `sqlite3` CLI opens read-write by default and
+would create `-wal`/`-shm` files beside Apple's cache:
 
 ```bash
-sqlite3 ~/Library/Caches/com.apple.Music/Cache.db \
-  ".tables" \
-  "SELECT count(*) FROM cfurl_cache_response;"
+cp ~/Library/Caches/com.apple.Music/Cache.db /tmp/music-cache.db
+sqlite3 /tmp/music-cache.db ".tables" "SELECT count(*) FROM cfurl_cache_response;"
 ```
 
 Two tables matter: `cfurl_cache_response` (the request key and timestamp) and
