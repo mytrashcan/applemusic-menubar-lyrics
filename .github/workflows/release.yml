@@ -85,7 +85,8 @@ jobs:
             dist/SHA256SUMS
 
       - name: Enforce requested notarization
-        if: inputs.require-notarization && steps.sign.outcome == 'skipped'
+        # inputs are only defined for workflow_dispatch; on a tag push this input is null.
+        if: github.event_name == 'workflow_dispatch' && inputs.require-notarization == true && steps.sign.outcome == 'skipped'
         run: |
           echo "::error::Notarization was required. Configure all five release secrets."
           exit 1
@@ -105,5 +106,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           sha256sum -c SHA256SUMS
-          gh release create "$GITHUB_REF_NAME" "MusicLyricsBar-${GITHUB_REF_NAME}-macOS-universal.zip" SHA256SUMS \
-            --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
+          asset="MusicLyricsBar-${GITHUB_REF_NAME}-macOS-universal.zip"
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # A release can already exist for the tag (hand-made draft or a rerun).
+            gh release upload "$GITHUB_REF_NAME" "$asset" SHA256SUMS --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$asset" SHA256SUMS \
+              --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
+          fi
