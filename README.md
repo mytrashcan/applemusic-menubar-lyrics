@@ -38,6 +38,10 @@ menu bar follows playback. Between lines, the previous lyric stays visible.
 Word highlighting uses Apple's word or syllable timestamps when available;
 other sources use line-level display.
 
+[**How it works**](docs/HOW-IT-WORKS.md) walks the whole path — Apple Events for playback,
+the match rule against Music's local cache (title + artist + duration within 2 seconds),
+and the TTML dialect it parses. There is no lyrics service and no network request.
+
 <details>
 <summary><strong>See the status window</strong> — live preview and playback diagnostics</summary>
 
