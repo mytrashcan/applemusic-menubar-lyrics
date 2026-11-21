@@ -1,6 +1,6 @@
 ## Title
 
-[OS] I made Music Lyrics Bar to follow Apple Music lyrics without switching windows
+[OS] I made Music Lyrics Bar to follow Apple Music lyrics without switching windows - Free
 
 ## Body
 
