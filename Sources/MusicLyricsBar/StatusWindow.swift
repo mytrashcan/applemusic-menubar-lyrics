@@ -31,6 +31,7 @@ final class StatusWindow: NSWindowController, NSWindowDelegate {
         status.textColor = .secondaryLabelColor
         metrics.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         metrics.setAccessibilityIdentifier("playbackMetrics")
+        metrics.setAccessibilityLabel("Playback position and timing")
         for option in LyricsWidth.allCases {
             widthControl.addItem(withTitle: option.controlTitle)
             widthControl.lastItem?.representedObject = option.rawValue

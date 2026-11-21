@@ -22,6 +22,7 @@ final class LyricPopover {
         preview.imageAlignment = .alignLeft
         preview.contentTintColor = .labelColor
         preview.setAccessibilityIdentifier("popoverLyric")
+        preview.setAccessibilityLabel("Current lyric")
         stack = NSStackView(views: [title, preview])
         stack.orientation = .vertical
         stack.alignment = .leading

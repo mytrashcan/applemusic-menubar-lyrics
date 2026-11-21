@@ -184,6 +184,11 @@ The app makes no network requests. It opens the cache database read-only and doe
 
 </details>
 
+[**Accessibility**](docs/ACCESSIBILITY.md) records what VoiceOver reads, what the controls
+announce, and what Reduce Motion does and does not suppress — separating tested behavior
+from untested cases.
+
+
 ## Before you try it
 
 - Open lyrics in Music first: this app uses already cached lyrics and does not fetch them from an API.
