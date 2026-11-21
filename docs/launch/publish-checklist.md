@@ -19,11 +19,13 @@
 
 ### D · 19:48 KST · r/macapps
 
-Open [r/macapps](https://www.reddit.com/r/macapps/), find the current App Pile and check you have not used this month’s entry. In Markdown mode, paste the title and body below as **one comment**. The project link is in Pricing. Use this venue once. The [owner note](reddit-macapps.md#owner-posting-note) covers eligibility if you choose the main feed instead.
+**Eligibility decides the venue, not a preference.** That subreddit removes promotion of a repository without 100+ stars or a year of history unless the poster qualifies through its transparency requirement; the registered alternative is the monthly megathread. This repository was created 2026-10-29 and has 0 stars, so a main-feed post would be removed. Use the **[Megathread] The App Pile — November, 2026** at https://www.reddit.com/r/macapps/comments/1xks9uj/megathread_the_app_pile_november_2026/ and nothing else. Check you have not used this month’s entry. In Markdown mode, paste the title and body below as **one comment**. The project link is in Pricing. Use this venue once. The [owner note](reddit-macapps.md#owner-posting-note) covers eligibility if you choose the main feed instead.
 
+
+The title carries the `- Free` suffix because that subreddit's example format is `[OS] Title - $2.99`.
 
 ```text
-[OS] I made Music Lyrics Bar to follow Apple Music lyrics without switching windows
+[OS] I made Music Lyrics Bar to follow Apple Music lyrics without switching windows - Free
 
 **Problem:** I wanted to catch the line I’d just misheard without leaving what I was reading.
 
