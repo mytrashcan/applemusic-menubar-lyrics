@@ -11,7 +11,7 @@ Original lyrics, live word highlighting, and a little less window switching.
 [![Swift 6+](https://img.shields.io/badge/Swift-6%2B-F05138?logo=swift&logoColor=white)](#build-from-source)
 [![WTFPL v2](https://img.shields.io/badge/License-WTFPL_v2-6e56cf)](LICENSE)
 
-[**Download for Apple Silicon**](https://github.com/mytrashcan/applemusic-menubar-lyrics/releases/latest) · [**Get started**](#getting-started) · [**Join the conversation**](https://github.com/mytrashcan/applemusic-menubar-lyrics/discussions)
+[**Download**](https://github.com/mytrashcan/applemusic-menubar-lyrics/releases/latest) · [**Get started**](#getting-started) · [**Join the conversation**](https://github.com/mytrashcan/applemusic-menubar-lyrics/discussions)
 
 <br>
 
@@ -58,17 +58,24 @@ the menu bar running. [Screenshot provenance](docs/images/README.md).
 
 ## Getting started
 
-**Apple Silicon, macOS 13 or later:** Download `MusicLyricsBar-v0.0.5-macOS-arm64.zip`
-from the [v0.0.5 release](https://github.com/mytrashcan/applemusic-menubar-lyrics/releases/tag/v0.0.5).
+**macOS 13 or later, Apple Silicon or Intel:** Download `MusicLyricsBar-v0.0.6-macOS-universal.zip`
+from the [latest release](https://github.com/mytrashcan/applemusic-menubar-lyrics/releases/latest).
 Extract it, move **Music Lyrics Bar.app** to Applications, and open it. Quit any running copy before replacing it.
-
-**Intel Mac:** [Build from source](#build-from-source) with a compatible Swift toolchain. Intel playback and the macOS 13 minimum are unverified.
+One binary runs natively on both architectures.
 
 If macOS says it cannot verify the app, dismiss the alert. If you trust the download,
 go to **System Settings → Privacy & Security → Security**, find Music Lyrics Bar,
 choose **Open Anyway**, and confirm when prompted. [Apple’s first-launch guide](https://support.apple.com/en-us/102445)
 
-**Homebrew:** The [cask](Casks/music-lyrics-bar.rb) is staged for a future universal download. For v0.0.5 use the arm64 ZIP above or build locally.
+**Homebrew:** the [cask](Casks/music-lyrics-bar.rb) installs the same universal build.
+
+```sh
+brew tap mytrashcan/lyrics https://github.com/mytrashcan/applemusic-menubar-lyrics.git
+brew install --cask mytrashcan/lyrics/music-lyrics-bar
+```
+
+Homebrew installs the app with a quarantine flag like any other download, so the
+first launch still needs the **Open Anyway** step above until a build is notarized.
 
 | Step | What to do |
 | :---: | :--- |

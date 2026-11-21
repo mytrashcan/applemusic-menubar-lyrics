@@ -1,8 +1,6 @@
 cask "music-lyrics-bar" do
-  version "0.0.5"
-  # Draft: one local ad-hoc ZIP. The public v0.0.5 release has only the arm64 asset.
-  # Pin the published universal ZIP after signing, stapling and final packaging.
-  sha256 "3f31dbe614e3fe519f3229154d682856888c64af52e34f64fde030ab8ef91b97"
+  version "0.0.6"
+  sha256 "27c33f63a1f7a88416f3e146cae57f1ab6bccc563f2d2ddac6d57ff1af20117c"
 
   url "https://github.com/mytrashcan/applemusic-menubar-lyrics/releases/download/v#{version}/MusicLyricsBar-v#{version}-macOS-universal.zip"
   name "Music Lyrics Bar"
@@ -12,4 +10,9 @@ cask "music-lyrics-bar" do
   depends_on macos: :ventura
 
   app "Music Lyrics Bar.app"
+
+  caveats <<~EOS
+    This build is ad-hoc signed and not notarized, so the first launch needs
+    System Settings → Privacy & Security → Open Anyway.
+  EOS
 end
