@@ -31,6 +31,8 @@ Original lyrics, live word highlighting, and a little less window switching.
 
 > **Early project.** Lyrics come from Apple Music's private local cache, which may change with macOS updates. The app is ad-hoc signed for local use and is not notarized.
 
+**What you need:** macOS 13 or later, the Music app with a track whose synced lyrics exist in your region, and one visit to that song's lyrics panel in Music — opening it is what puts the lyrics on disk. [Why that is enough](docs/HOW-IT-WORKS.md)
+
 ## In action
 
 Long lines scroll with the sung portion. Pause, seek, or change tracks, and the
