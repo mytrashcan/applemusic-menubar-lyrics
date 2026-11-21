@@ -1,5 +1,7 @@
 # Launch kit status
 
+> **Historical v0.0.5 snapshot.** The tables, commands and results below describe the earlier audit. For the published universal ZIP, cask and first-launch checks, see [v0.0.6 verification](status-3.md).
+
 **Ready locally:** the copy, install guide, native and universal packaging paths, and checksum-pinned cask draft. The public release still contains the arm64 ZIP only.
 
 | Deliverable | Status | Evidence or remaining work |
