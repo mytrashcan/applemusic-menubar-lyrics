@@ -11,7 +11,7 @@ Original lyrics, live word highlighting, and a little less window switching.
 [![Swift 6+](https://img.shields.io/badge/Swift-6%2B-F05138?logo=swift&logoColor=white)](#build-from-source)
 [![WTFPL v2](https://img.shields.io/badge/License-WTFPL_v2-6e56cf)](LICENSE)
 
-[**Download**](https://github.com/mytrashcan/applemusic-menubar-lyrics/releases/latest) · [**Get started**](#getting-started) · [**Join the conversation**](https://github.com/mytrashcan/applemusic-menubar-lyrics/discussions)
+[**Download for Apple Silicon**](https://github.com/mytrashcan/applemusic-menubar-lyrics/releases/latest) · [**Get started**](#getting-started) · [**Join the conversation**](https://github.com/mytrashcan/applemusic-menubar-lyrics/discussions)
 
 <br>
 
@@ -52,9 +52,17 @@ the menu bar running. [Screenshot provenance](docs/images/README.md).
 
 ## Getting started
 
-Choose the [latest release](https://github.com/mytrashcan/applemusic-menubar-lyrics/releases/latest)
-or [build from source](#build-from-source) for the current implementation.
-Packaged releases may trail `main`; check the release's architecture and notes.
+**Apple Silicon, macOS 13 or later:** Download `MusicLyricsBar-v0.0.5-macOS-arm64.zip`
+from the [v0.0.5 release](https://github.com/mytrashcan/applemusic-menubar-lyrics/releases/tag/v0.0.5).
+Extract it, move **Music Lyrics Bar.app** to Applications, and open it. Quit any running copy before replacing it.
+
+**Intel Mac:** [Build from source](#build-from-source) with a compatible Swift toolchain. Intel playback and the macOS 13 minimum are unverified.
+
+If macOS says it cannot verify the app, dismiss the alert. If you trust the download,
+go to **System Settings → Privacy & Security → Security**, find Music Lyrics Bar,
+choose **Open Anyway**, and confirm when prompted. [Apple’s first-launch guide](https://support.apple.com/en-us/102445)
+
+**Homebrew:** The [cask](Casks/music-lyrics-bar.rb) is staged for a future universal download. For v0.0.5 use the arm64 ZIP above or build locally.
 
 | Step | What to do |
 | :---: | :--- |
@@ -62,6 +70,9 @@ Packaged releases may trail `main`; check the release's architecture and notes.
 | **2** | Play a song in Music and **open its lyrics panel once** so Music can cache the lyrics. |
 | **3** | Let the app retry, or choose **Reload Lyrics Cache**. Your lyrics appear when a matching cache entry is available. |
 
+If you declined automation, enable **Music** under **Music Lyrics Bar** in
+**System Settings → Privacy & Security → Automation**, then connect again.
+Choose **Show Status** in the app’s menu to see whether it is waiting for playback or a matching lyric.
 The app remembers your connection choice. Turn off **Connect on Launch** in its
 menu if you prefer to connect manually.
 
@@ -79,6 +90,10 @@ open "dist/Music Lyrics Bar.app"
 
 Outputs: `dist/Music Lyrics Bar.app` and `dist/MusicLyricsBar.zip`.
 GitHub Actions also tests and packages the app.
+
+To package both Apple Silicon and Intel, run `bash scripts/build-app.sh --universal`
+with a macOS SDK that supports both targets. The signed app is in
+`dist/universal/Music Lyrics Bar.app` and the archive is `dist/MusicLyricsBar-v<version>-macOS-universal.zip`.
 
 ## Make room for your lyrics
 
