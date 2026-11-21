@@ -15,6 +15,8 @@ jobs:
         run: bash scripts/test.sh
       - name: Package app
         run: bash scripts/build-app.sh
+      - name: Package universal app (Intel slice regression check)
+        run: bash scripts/build-app.sh --universal && lipo -archs "dist/universal/Music Lyrics Bar.app/Contents/MacOS/MusicLyricsBar"
       - name: Upload local-use app
         uses: actions/upload-artifact@v4
         with:
