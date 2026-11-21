@@ -1,0 +1,52 @@
+name: Bug report
+description: Report a lyrics, playback, or menu bar problem.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not upload Music cache files or screen recordings containing personal data.
+        Report the status message as text. Remove track names, account details, and lyrics.
+        English and Korean reports are welcome.
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      description: Open Apple menu → About This Mac.
+    validations:
+      required: true
+  - type: input
+    id: music
+    attributes:
+      label: Apple Music version
+      description: In Music, choose Music → About Music.
+    validations:
+      required: true
+  - type: dropdown
+    id: lyrics-panel
+    attributes:
+      label: Did you open the lyrics panel for this track in Music?
+      options:
+        - "Yes"
+        - "No"
+        - Unsure
+    validations:
+      required: true
+  - type: input
+    id: status
+    attributes:
+      label: Status-window message
+      description: Choose Show Status from the app menu and copy the message. If the window cannot open, say so.
+    validations:
+      required: true
+  - type: dropdown
+    id: bar
+    attributes:
+      label: What does the menu bar show?
+      options:
+        - The lyric is empty or missing
+        - A lyric appears but it is the wrong line
+        - Something else
+    validations:
+      required: true

@@ -1,6 +1,7 @@
 cask "music-lyrics-bar" do
   version "0.0.5"
-  # Draft pin for the local universal ZIP. Replace with the final release digest.
+  # Draft: one local ad-hoc ZIP. The public v0.0.5 release has only the arm64 asset.
+  # Pin the published universal ZIP after signing, stapling and final packaging.
   sha256 "3f31dbe614e3fe519f3229154d682856888c64af52e34f64fde030ab8ef91b97"
 
   url "https://github.com/mytrashcan/applemusic-menubar-lyrics/releases/download/v#{version}/MusicLyricsBar-v#{version}-macOS-universal.zip"

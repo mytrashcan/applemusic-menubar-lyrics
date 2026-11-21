@@ -1,0 +1,109 @@
+name: Universal release
+
+'on':
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      require-notarization:
+        description: Fail after artifact upload if signing credentials are missing
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: universal-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-15
+    outputs:
+      notarized: ${{ steps.sign.outcome == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Test and build universal app
+        id: build
+        shell: bash
+        run: |
+          plist=Resources/Info.plist
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Use a version tag such as v0.0.6"
+              exit 1
+            fi
+            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${GITHUB_REF_NAME#v}" "$plist"
+            base=$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$plist")
+            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $((base + GITHUB_RUN_NUMBER))" "$plist"
+          fi
+          version=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$plist")
+          bash scripts/test.sh
+          bash scripts/build-app.sh --universal
+          echo "asset=MusicLyricsBar-v${version}-macOS-universal.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Check signing configuration
+        id: credentials
+        env:
+          READY: ${{ secrets.DEVELOPER_ID_P12_BASE64 != '' && secrets.DEVELOPER_ID_P12_PASSWORD != '' && secrets.APPLE_ID != '' && secrets.APPLE_TEAM_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' }}
+        run: |
+          echo "ready=$READY" >> "$GITHUB_OUTPUT"
+          if [[ "$READY" != true ]]; then
+            echo "::warning::Signing credentials incomplete. Saving ad-hoc artifacts only."
+          fi
+
+      - name: Sign, notarize and repackage
+        id: sign
+        if: steps.credentials.outputs.ready == 'true'
+        env:
+          DEVELOPER_ID_P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          ASSET: ${{ steps.build.outputs.asset }}
+        run: bash scripts/notarize-app.sh "dist/universal/Music Lyrics Bar.app" "dist/$ASSET"
+
+      - name: Check final archive digest
+        working-directory: dist
+        env:
+          ASSET: ${{ steps.build.outputs.asset }}
+        run: |
+          shasum -a 256 "$ASSET" > SHA256SUMS
+          shasum -a 256 -c SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: universal-${{ steps.sign.outcome == 'success' && 'notarized' || 'adhoc' }}
+          if-no-files-found: error
+          path: |
+            dist/${{ steps.build.outputs.asset }}
+            dist/SHA256SUMS
+
+      - name: Enforce requested notarization
+        if: inputs.require-notarization && steps.sign.outcome == 'skipped'
+        run: |
+          echo "::error::Notarization was required. Configure all five release secrets."
+          exit 1
+
+  publish:
+    needs: build
+    if: github.ref_type == 'tag' && needs.build.outputs.notarized == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: universal-notarized
+      - name: Publish verified assets for the existing tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha256sum -c SHA256SUMS
+          gh release create "$GITHUB_REF_NAME" "MusicLyricsBar-${GITHUB_REF_NAME}-macOS-universal.zip" SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes

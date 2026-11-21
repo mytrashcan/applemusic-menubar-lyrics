@@ -10,7 +10,8 @@ Send visitors to the [repository](https://github.com/mytrashcan/applemusic-menub
 | [HelloGitHub](hellogithub.zh.md) | Chinese submission form fields |
 | [科技爱好者周刊](ruanyf-weekly.zh.md) | Standalone Chinese issue for the weekly |
 | [X](x-post.md) | Choose a single post and attach the captioned clip |
-| [Verification status](status.md) | Tested artifacts, exact commands and remaining owner checks |
+| [Release runbook](release-runbook.md) | Set up the signing identity, publish a verified download and pin the cask |
+| [Initial audit status](status.md) · [Release verification](status-2.md) | Tested artifacts, exact commands and remaining owner checks |
 
 ## Owner calendar
 
@@ -20,7 +21,7 @@ D is the day you first share the project. These are proposed appointments in **K
 | --- | --- | --- | --- | --- | --- |
 | D−7 19:48 | GitHub | **Done on main:** hero GIF, status screenshot, cache caveat and release ZIP. Record stars, watchers, ZIP downloads and unique visitors before promotion. | Owner | Baseline only to a useful comparison later | Insights and API read |
 | D−5 19:48 | Releases / README | **In branch:** verify the install guide, cask draft and universal script. Rehearse the public ZIP on a clean Mac. Decide whether to wait for notarization or disclose the exception. | Owner | Discover a launch blocker to confirm a working first run | Test Mac, download and setup time. Signing requires developer credentials |
-| D−3 19:48 | GitHub About / Settings | Apply the topic list and upload the social card in the audit. Inspect the rendered link preview. **Pending.** | Owner | No referral change to a recognizable shared link | Image editing and repository admin time |
+| D−3 19:48 | GitHub About / Settings | Apply the topic list and upload the [social card](../images/social-preview.png). Inspect the rendered link preview. **Pending.** | Owner | No referral change to a recognizable shared link | Repository admin time |
 | D−1 19:48 | Local capture / GitHub | Record the demo with the shot list. Check current release architecture and signing against each draft. Make the README install changes public before directing visitors to them. **Copy prepared in branch.** | Owner | Catch stale copy to give a stranger a reproducible first run | Capture, editing and review time |
 | D 19:48 | r/macapps | Enter the current App Pile, or use the main feed only if eligible. Answer install and comparison questions. | Owner | No replies to a thread with first-run reports | Posting and reply time |
 | D+1 19:48 | X | Attach the clip to one variant. Link the repo directly and answer questions on the original post. | Owner | No clicks to clicks and shares | Upload and reply time |
