@@ -16,6 +16,8 @@ The cache is private. Matching can fail even when you can see lyrics in Music, a
 
 The GIF shows actual playback. The current ZIP is Apple Silicon only and unnotarized. There’s also a local Swift build.
 
+The whole path — Apple Events for playback, the title/artist/duration match, the TTML dialect — is written up in https://github.com/mytrashcan/applemusic-menubar-lyrics/blob/main/docs/HOW-IT-WORKS.md
+
 ## Owner posting note
 
 Use the draft as technical notes and write the submission in your own words. HN asks authors to avoid generated text. Submit the repository URL and stay available for questions. Every Show HN starts on shownew. A front-page appearance is a minority outcome. Plan for anything from silence to a useful cache report. [HN guidelines](https://news.ycombinator.com/newsguidelines.html) · [Show HN guidelines](https://news.ycombinator.com/showhn.html) · [Discussion of front-page outcomes](https://news.ycombinator.com/item?id=36590226)

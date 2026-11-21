@@ -44,7 +44,14 @@ jobs:
           version=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$plist")
           bash scripts/test.sh
           bash scripts/build-app.sh --universal
-          echo "asset=MusicLyricsBar-v${version}-macOS-universal.zip" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            asset="dist/MusicLyricsBar-v${version}-macOS-universal.zip"
+          else
+            # A dispatch run must not produce a filename that looks like a tagged release asset.
+            asset="dist/MusicLyricsBar-v${version}-universal-dispatch${GITHUB_RUN_NUMBER}.zip"
+            mv "dist/MusicLyricsBar-v${version}-macOS-universal.zip" "$asset"
+          fi
+          echo "asset=$(basename "$asset")" >> "$GITHUB_OUTPUT"
 
       - name: Check signing configuration
         id: credentials
