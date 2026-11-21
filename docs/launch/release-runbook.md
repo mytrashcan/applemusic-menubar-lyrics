@@ -1,81 +1,39 @@
-# Ship a notarized universal release
+# Verify the v0.0.6 universal release
 
-The public v0.0.5 ZIP contains an ad-hoc signed Apple Silicon app. Nothing in this repository fixes Gatekeeper for that download. A normal first launch requires distributing a new build with a Developer ID Application signature and an accepted notarization ticket. The Apple Developer Program is a paid annual membership. [Apple membership](https://developer.apple.com/programs/whats-included/) · [Developer ID distribution](https://developer.apple.com/developer-id/)
+The [public release](https://github.com/mytrashcan/applemusic-menubar-lyrics/releases/tag/v0.0.6) ships an ad-hoc signed, unnotarized app. The owner distributes this build directly. The tag workflow’s publish job skipped. The release API attributes both public assets to `mytrashcan`. [Observed results](status-3.md)
 
-## Set up the owner's Mac once
+## Find the tag build in Actions
 
-1. Enroll in the Apple Developer Program or use your existing team. As Account Holder, open Keychain Access → Certificate Assistant → Request a Certificate From a Certificate Authority. Enter your email and common name, select **Saved to disk**, and save the certificate signing request.
-2. In the developer account, open **Certificates, Identifiers & Profiles → Certificates → + → Developer ID Application**. Follow Apple's certificate assistant, upload the request, download the issued certificate, and double-click it on the Mac that created the request. In Keychain Access → login → My Certificates, expand **Developer ID Application** and confirm its private key is present. [Apple certificate instructions](https://developer.apple.com/help/account/certificates/create-developer-id-certificates/)
-3. Run `security find-identity -v -p codesigning`. Confirm the Developer ID Application identity is valid and shows your team ID. Export that identity and its private key from My Certificates as a password-protected `.p12`. Keep the file and password outside the checkout.
-4. At **account.apple.com → Sign-In and Security → App-Specific Passwords**, generate a password for notarization. Copy your team ID from the developer account's membership details. On your Mac, substitute your Apple Account email and team ID below. Enter the app-specific password at the secure prompt. Successful validation and a history response confirm the profile works. [Apple notary workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow)
+1. Open **Actions → Universal release**. Select the **push** run for tag **v0.0.6** (run **#3**). The run title is the commit subject. [Tag run summary](https://github.com/mytrashcan/applemusic-menubar-lyrics/actions/runs/44904114630)
+2. In **Jobs**, open **build**. **Test and build universal app** and the digest check succeeded. **Sign, notarize and repackage** and **Enforce requested notarization** were skipped. The summary lists **universal-adhoc** under **Artifacts**. That Actions download wraps the release ZIP and checksum. [Build job](https://github.com/mytrashcan/applemusic-menubar-lyrics/actions/runs/44904114630/job/136845957579)
+3. The **publish** job shows **Skipped**. A tag alone cannot run it. The workflow also requires a successful signing step, which requires all five credentials. The public release is a separate distribution step for this launch. [Skipped job](https://github.com/mytrashcan/applemusic-menubar-lyrics/actions/runs/44904114630/job/136846203734) · [Workflow](../../.github/workflows/release.yml)
 
-```sh
-xcrun notarytool store-credentials ac-notary --apple-id 'YOUR_APPLE_EMAIL' --team-id 'YOUR_TEAM_ID'
-xcrun notarytool history --keychain-profile ac-notary
-```
+**Manual rehearsal.** An owner with write access can use **Actions → Universal release → Run workflow**, select **main** and leave **require-notarization** unchecked. A branch run names its inner ZIP with `universal-dispatch<run>` and skips publication. Checking the box on a credential-free dispatch fails the build *after* artifact upload. A tag push has no checkbox. Inspecting the existing runs is sufficient for this release. [Recorded branch rehearsal](https://github.com/mytrashcan/applemusic-menubar-lyrics/actions/runs/44902629975)
 
-## Add the repository secrets
+## Recheck the assets on a Mac
 
-Open **Settings → Secrets and variables → Actions → New repository secret**. The hosted runner creates its own temporary keychain and notary profile from these five values. Your local profile stays on your Mac. [GitHub signing setup](https://docs.github.com/en/actions/how-tos/deploy/deploy-to-third-party-platforms/sign-xcode-applications)
-
-| Repository secret | Value |
-| --- | --- |
-| `DEVELOPER_ID_P12_BASE64` | Base64 of the exported identity. To send it directly, run `base64 -i /path/to/identity.p12 \| gh secret set DEVELOPER_ID_P12_BASE64 --repo mytrashcan/applemusic-menubar-lyrics` on the owner's Mac. |
-| `DEVELOPER_ID_P12_PASSWORD` | The password chosen during the .p12 export. |
-| `APPLE_ID` | The Apple Account email used for notarization. |
-| `APPLE_TEAM_ID` | The team ID on the certificate. |
-| `APPLE_APP_SPECIFIC_PASSWORD` | The app-specific password used for the local notary profile. |
-
-## Tag the release
-
-Put the reviewed workflow on the public default branch first. To rehearse, select **Actions → Universal release → Run workflow** on that branch. A branch run never publishes: it uploads the ZIP and `SHA256SUMS` as Actions artifacts, and the artifact is named `MusicLyricsBar-v<version>-universal-dispatch<run>.zip` so it cannot be mistaken for a tagged release asset. Enable **require-notarization** only when the five secrets are already set — with a secret missing, that input deliberately fails the run after the artifact upload. Check the notarized artifact on an Intel Mac and on the minimum supported macOS before making hardware compatibility claims.
-
-From the reviewed commit on the owner's Mac, choose a fresh `vMAJOR.MINOR.PATCH` tag. For example, if v0.0.6 is available, run these commands. The workflow stamps the runner's bundle version from the tag and adds the workflow run number to the checked-in build number.
-
-```sh
-tag=v0.0.6
-git tag -a "$tag" -m "Music Lyrics Bar $tag"
-git push origin "refs/tags/$tag"
-```
-
-Watch **Actions → Universal release**. The signing step checks Apple's acceptance, staples the app, reopens the final ZIP and assesses the extracted app. The publish job re-verifies the digest, then either creates the release for the tag or uploads the assets to it with `--clobber` when a release already exists. Nothing is published until the notarized artifact exists. [GitHub CLI release creation](https://cli.github.com/manual/gh_release_create)
-
-With any secret missing, a tag run uploads `universal-adhoc` and skips publication. With **require-notarization** enabled, a missing secret also fails the run after artifact upload. Invalid credentials or a rejected submission fail the signing step. Fix the credentials and rerun the workflow for the same tag. For a rejected submission, inspect the submission ID in the log with `xcrun notarytool log SUBMISSION_ID --keychain-profile ac-notary`. If a GitHub upload was interrupted, re-run the publish job — it uploads over existing assets rather than failing on them. A public release should contain both verified files.
-
-## Verify the public download
-
-Run this on macOS in the same shell with the new tag. Stop if any command fails. The ZIP must pass the published checksum, contain both architectures, have the expected bundle version and Developer ID team, pass Gatekeeper assessment, and carry a valid stapled ticket.
+In a fresh shell, run the commands below. The digest and signature checks must succeed. Expect version `0.0.6`, build `8`, architectures `x86_64 arm64`, minimum OS `13.0`, `Signature=adhoc` and `TeamIdentifier=not set`.
 
 ```sh
 set -e
-verify_dir=$(mktemp -d)
-asset="MusicLyricsBar-${tag}-macOS-universal.zip"
-gh release download "$tag" --repo mytrashcan/applemusic-menubar-lyrics \
-  --pattern "$asset" --pattern SHA256SUMS --dir "$verify_dir"
-cd "$verify_dir"
+work=$(mktemp -d)
+cd "$work"
+asset=MusicLyricsBar-v0.0.6-macOS-universal.zip
+gh release download v0.0.6 --repo mytrashcan/applemusic-menubar-lyrics \
+  --pattern "$asset" --pattern SHA256SUMS
 shasum -a 256 -c SHA256SUMS
 ditto -x -k "$asset" .
 app="Music Lyrics Bar.app"
 lipo -archs "$app/Contents/MacOS/MusicLyricsBar"
-lipo "$app/Contents/MacOS/MusicLyricsBar" -verify_arch arm64
-lipo "$app/Contents/MacOS/MusicLyricsBar" -verify_arch x86_64
-test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$app/Contents/Info.plist")" = "${tag#v}"
+plutil -p "$app/Contents/Info.plist"
 codesign -dvv "$app"
 codesign --verify --deep --strict --all-architectures "$app"
-spctl --assess --type execute --verbose=4 "$app"
-xcrun stapler validate "$app"
-shasum -a 256 "$asset"
 ```
 
-On a physical Intel Mac with full Xcode and Intel Swift Testing frameworks, check out the release tag and run `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer bash scripts/test.sh --arch x86_64`. For the user-facing test, download the published ZIP with Safari and open the extracted app from Applications on a clean account. Connect to Music, play a track, open its lyrics panel, hide Music, then pause, seek and switch tracks. Record the Mac architecture, OS and Music versions, and the message in **Show Status**. Repeat the launch and playback checks on macOS 13.
+Then run `spctl --assess --type execute -vv "Music Lyrics Bar.app"` in that directory. The expected result on the verification Mac was `rejected` (exit 3). An internal assessment error is inconclusive. For a trusted browser download, try opening the app from Applications, dismiss the verification warning, then choose **System Settings → Privacy & Security → Open Anyway** and confirm. [Apple’s first-launch guide](https://support.apple.com/en-us/102445)
 
-## Pin and install the cask
+## Check the cask and playback
 
-Back in the repository, set `version` in `Casks/music-lyrics-bar.rb` to the published version without `v`. Set `sha256` to the final digest printed above and remove the draft-pin comment. Run `ruby -c Casks/music-lyrics-bar.rb` and put the updated cask on the public default branch. Signing, timestamps and stapling change the ZIP bytes.
+Compare the ZIP basename and SHA-256 with the [cask](../../Casks/music-lyrics-bar.rb). Its app stanza must match the extracted bundle name. From the checkout, run `ruby -c Casks/music-lyrics-bar.rb`. The [Homebrew instructions](../../Casks/README.md) include the explicit tap URL and qualified cask name. The installed app retains quarantine and needs the same first-launch step.
 
-On a clean Homebrew installation with an empty download cache, run the two commands below. The explicit Git URL selects this repository as the tap. If Homebrew asks you to trust the cask, review the cask and follow the displayed trust prompt, then repeat the install. Open the installed app and confirm the first lyric before updating the README's draft-install notice. [Cask handoff](../../Casks/README.md)
-
-```sh
-brew tap mytrashcan/lyrics https://github.com/mytrashcan/applemusic-menubar-lyrics.git
-brew install --cask mytrashcan/lyrics/music-lyrics-bar
-```
+For a physical Intel or macOS 13 playback report, use the shipped ZIP. Connect to Music, allow Automation, play a track, open its lyrics panel, then hide Music, pause, seek and switch tracks. Record the architecture, OS, Music version and redacted **Show Status** message. [Compatibility thread](https://github.com/mytrashcan/applemusic-menubar-lyrics/discussions/5)

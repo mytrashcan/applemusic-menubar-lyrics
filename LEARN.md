@@ -394,9 +394,10 @@ ditto -c -k --sequesterRsrc --keepParent "$app_dir" "$PWD/dist/MusicLyricsBar.zi
 - A bundle identifier you control, since automation permissions are granted per
   bundle identity.
 
-Ad-hoc signing (`--sign -`) is enough to run locally, and it means the app is not
-notarized: first launch needs a right-click → Open, or a Gatekeeper exception. Say
-so in the README instead of letting users discover it.
+The packaged app is ad-hoc signed (`--sign -`) and unnotarized. On first launch
+from a quarantined download, dismiss the verification warning. If you trust the
+download, choose **System Settings → Privacy & Security → Open Anyway** and confirm.
+[First-launch instructions](README.md#getting-started)
 
 ---
 

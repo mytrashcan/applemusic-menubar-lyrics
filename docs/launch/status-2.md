@@ -1,12 +1,14 @@
 # Launch follow-up verification
 
+> **Historical v0.0.5 snapshot.** The tables, commands and results below describe the earlier audit. For the published universal ZIP, cask and first-launch checks, see [v0.0.6 verification](status-3.md).
+
 **The remaining release blocker for a first post promising a normal Gatekeeper launch is a publicly downloadable, Developer ID–signed and notarized universal build.** The owner can already share the current arm64 release with its documented first-launch exception.
 
 | Item | Status | Evidence or owner action |
 | --- | --- | --- |
 | 1. [Release automation](../../.github/workflows/release.yml) | DONE | Actionlint and PyYAML passed. The tag build and fallback shell steps ran locally. A credential-free tag produces Actions artifacts only. The publish job requires a successful signing step and a tag. |
 | 1. Hosted artifact upload, signing, notarization, stapling and publication | NOT DONE | This Mac has zero valid identities and no notary profile. No workflow was dispatched or tag created. Owner should run the strict branch rehearsal, inspect the download, then tag the reviewed commit. |
-| 2. [Owner runbook](release-runbook.md) | DONE | Includes annual membership, certificate and private-key export, local profile, all five matching workflow secrets, tag, public ZIP checks and cask installation. |
+| 2. [Owner runbook at the time](https://github.com/mytrashcan/applemusic-menubar-lyrics/blob/27008f9/docs/launch/release-runbook.md) | DONE | Includes annual membership, certificate and private-key export, local profile, all five matching workflow secrets, tag, public ZIP checks and cask installation. |
 | 3. [Social card](../images/social-preview.png) | DONE | Opaque 1280 × 640 PNG, 107,418 bytes. Both English lines and the two lyric shades are readable at 320 × 160. [Capture and crop](../images/README.md) |
 | 3. Repository social preview | NOT DONE | Owner should upload the PNG under Settings → Social preview → Edit, then inspect a fresh shared link. |
 | 4. [Bug form](../../.github/ISSUE_TEMPLATE/bug-report.yml) | DONE | Replaced the existing form. Five required fields cover the two versions, current track's lyrics panel, status text and bar behavior. Both YAML files parsed. |
