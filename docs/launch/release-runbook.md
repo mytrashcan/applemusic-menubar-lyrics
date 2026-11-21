@@ -28,7 +28,7 @@ Open **Settings → Secrets and variables → Actions → New repository secret*
 
 ## Tag the release
 
-Put the reviewed workflow on the public default branch first. To rehearse, select **Actions → Universal release → Run workflow**, choose that branch and enable **require-notarization**. A branch run produces Actions artifacts. Check the notarized artifact on an Intel Mac and on the minimum supported macOS before making hardware compatibility claims.
+Put the reviewed workflow on the public default branch first. To rehearse, select **Actions → Universal release → Run workflow** on that branch. A branch run never publishes: it uploads the ZIP and `SHA256SUMS` as Actions artifacts, and the artifact is named `MusicLyricsBar-v<version>-universal-dispatch<run>.zip` so it cannot be mistaken for a tagged release asset. Enable **require-notarization** only when the five secrets are already set — with a secret missing, that input deliberately fails the run after the artifact upload. Check the notarized artifact on an Intel Mac and on the minimum supported macOS before making hardware compatibility claims.
 
 From the reviewed commit on the owner's Mac, choose a fresh `vMAJOR.MINOR.PATCH` tag. For example, if v0.0.6 is available, run these commands. The workflow stamps the runner's bundle version from the tag and adds the workflow run number to the checked-in build number.
 
@@ -38,9 +38,9 @@ git tag -a "$tag" -m "Music Lyrics Bar $tag"
 git push origin "refs/tags/$tag"
 ```
 
-Watch **Actions → Universal release**. The signing step checks Apple's acceptance, staples the app, reopens the final ZIP and assesses the extracted app. The publish job verifies the digest again and attaches the ZIP and `SHA256SUMS` to the tag. The GitHub CLI stages the assets in a draft before publishing them together. [GitHub CLI release creation](https://cli.github.com/manual/gh_release_create)
+Watch **Actions → Universal release**. The signing step checks Apple's acceptance, staples the app, reopens the final ZIP and assesses the extracted app. The publish job re-verifies the digest, then either creates the release for the tag or uploads the assets to it with `--clobber` when a release already exists. Nothing is published until the notarized artifact exists. [GitHub CLI release creation](https://cli.github.com/manual/gh_release_create)
 
-With any secret missing, a tag run uploads `universal-adhoc` and skips publication. With **require-notarization** enabled, a missing secret also fails the run after artifact upload. Invalid credentials or a rejected submission fail the signing step. Fix the credentials and rerun the workflow for the same tag. For a rejected submission, inspect the submission ID in the log with `xcrun notarytool log SUBMISSION_ID --keychain-profile ac-notary`. If a GitHub upload was interrupted, inspect Releases for an incomplete draft before retrying. A public release should contain both verified files.
+With any secret missing, a tag run uploads `universal-adhoc` and skips publication. With **require-notarization** enabled, a missing secret also fails the run after artifact upload. Invalid credentials or a rejected submission fail the signing step. Fix the credentials and rerun the workflow for the same tag. For a rejected submission, inspect the submission ID in the log with `xcrun notarytool log SUBMISSION_ID --keychain-profile ac-notary`. If a GitHub upload was interrupted, re-run the publish job — it uploads over existing assets rather than failing on them. A public release should contain both verified files.
 
 ## Verify the public download
 
